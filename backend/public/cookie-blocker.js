@@ -1,9 +1,22 @@
 /**
  * Complyo Cookie Blocker & Auto-Blocking System
- * Version: 2.0.0
- * 
+ * Version: 2.1.0
+ *
  * Automatically blocks scripts, iframes, and cookies until user consent
  * DSGVO/GDPR compliant cookie management
+ *
+ * 2.1.0 (10.11.2026): Kategorien statt flacher Musterliste (YouTube-API, Vimeo-API,
+ * widgetapi), Haken auf Prototypen statt createElement, Einwilligung auch aus
+ * localStorage (Banner-Schluessel), serverseitig neutralisierte Skripte/iframes
+ * (Plugin) werden von hier freigegeben, auch fuer wiederkehrende Besucher.
+ * Platzhalter fuer iframes baut allein der Content-Blocker des Widgets (Banner-
+ * Gestaltung), hier gibt es keinen eigenen Platzhalter mehr.
+ *
+ * Grenze, die kein Browser-Skript loesen kann: Der Vorlade-Scanner des Browsers holt
+ * statische <script src>/<link href> im HTML, bevor dieses Skript sie anfassen kann.
+ * Das schliesst nur die Serverseite (WordPress-Plugin: Neutralisierung im Markup,
+ * type="text/plain" + data-complyo-src). Dieses Skript gibt solche Elemente nach
+ * der Einwilligung frei.
  */
 
 (function() {
@@ -38,6 +51,71 @@
         return null;
     }
 
+    // Originale Funktionen VOR dem Ueberschreiben sichern (die Haken rufen sie auf).
+    const nativeSetAttribute = Element.prototype.setAttribute;
+    const nativeGetAttribute = Element.prototype.getAttribute;
+    const nativeRemoveAttribute = Element.prototype.removeAttribute;
+    const scriptSrcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+    const linkHrefDesc = Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href');
+    const iframeSrcDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+
+    // Skripte je Kategorie. Eine Kategorie ist erst frei, wenn der Besucher sie
+    // eingewilligt hat. YouTube/Vimeo-APIs zaehlen als marketing (wie ihre iframes).
+    const SCRIPT_RULES = {
+        analytics: [
+            /googletagmanager\.com\/(gtag|gtm)/,
+            /google-analytics\.com/,
+            /static\.hotjar\.com/,
+            /matomo\.js|piwik\.js/,
+            /plausible\.io/,
+            /clarity\.ms/
+        ],
+        marketing: [
+            /connect\.facebook\.net/,
+            /facebook\.com\/tr/,
+            /googleadservices\.com/,
+            /doubleclick\.net/,
+            /snap\.licdn\.com/,
+            /analytics\.tiktok\.com/,
+            /platform\.twitter\.com/,
+            // Video-APIs: werden von Slidern/Page-Buildern dynamisch nachgeladen
+            /youtube(-nocookie)?\.com\/(iframe_api|player_api)/,
+            /youtube\.com\/s\/player\//,
+            /s\.ytimg\.com\/yts\//,
+            /www-widgetapi\.js/,
+            /player\.vimeo\.com\/api\//
+        ],
+        functional: [
+            /widget\.intercom\.io/,
+            /static\.zdassets\.com/,
+            /embed\.tawk\.to/,
+            /client\.crisp\.chat/
+        ]
+    };
+
+    // Rahmen (iframes) je Kategorie.
+    const IFRAME_RULES = {
+        marketing: [
+            /youtube(-nocookie)?\.com\/embed/,
+            /player\.vimeo\.com/,
+            /instagram\.com\/embed/,
+            /twitter\.com\/widgets/,
+            /platform\.twitter\.com/
+        ],
+        functional: [
+            /google\.com\/maps\/embed/
+        ]
+    };
+
+    // Anbieter, die Daten in die USA uebertragen (Art. 49 Abs. 1 lit. a DSGVO):
+    // zusaetzlich zur Kategorie wird die gesonderte Drittland-Einwilligung verlangt,
+    // wie sie der Banner mit "Alle akzeptieren" bzw. dem Drittland-Schalter erteilt.
+    const US_HOSTS = /(^|[./])(google|googleapis|gstatic|googletagmanager|google-analytics|googleadservices|doubleclick|youtube|youtube-nocookie|ytimg|facebook|facebook\.net|instagram|twitter|linkedin|licdn|tiktok|vimeo)\./i;
+
+    function absoluteUrl(u) {
+        try { return new URL(String(u), document.baseURI).href; } catch (e) { return String(u || ''); }
+    }
+
     const ComplyoCookieBlocker = {
         // Configuration
         config: {
@@ -50,7 +128,7 @@
             localStorageKeys: [],
             serviceConfig: {}
         },
-        
+
         // State
         state: {
             consent: null,
@@ -58,30 +136,31 @@
             blockedElements: [],
             pendingScripts: []
         },
-        
+
         /**
          * Initialize the blocker
          */
         init: function() {
             if (this.state.initialized) return;
-            
+
             console.log('[Complyo] 🛡️ Cookie Blocker initializing...');
-            
+
             // Statische Block-Patterns SOFORT bauen, damit der erste (synchrone)
             // Scan bereits greift — die API-Konfiguration verfeinert sie danach.
             this.buildBlockingPatterns([]);
+
+            // Einwilligung VOR dem ersten Haken laden: wer schon zugestimmt hat,
+            // soll nie blockiert werden (kein Block-Freigabe-Zickzack).
+            this.loadConsent();
 
             // Load configuration from API (async, verfeinert Patterns)
             this.loadConfiguration();
 
             // Block scripts before they execute
             this.blockScriptsEarly();
-            
+
             // Listen for DOM changes
             this.observeDOM();
-            
-            // Load existing consent
-            this.loadConsent();
 
             // Auf Consent aus dem Banner reagieren. Der Banner feuert
             // 'complyoConsent' (window + document), ruft aber NICHT direkt
@@ -98,8 +177,8 @@
 
         /**
          * Consent-Event des Banners verarbeiten: Kategorien in das interne
-         * Consent-Format überführen und blockierte Elemente (insb. Google-Fonts-
-         * Stylesheets) SOFORT wieder freigeben – ohne Page-Reload.
+         * Consent-Format überführen und blockierte Elemente SOFORT wieder
+         * freigeben – ohne Page-Reload.
          */
         applyConsentFromEvent: function(e) {
             const detail = (e && e.detail) || {};
@@ -112,14 +191,15 @@
                     necessary:  true,
                     functional: cats.functional === true,
                     analytics:  cats.analytics  === true,
-                    marketing:  cats.marketing  === true
+                    marketing:  cats.marketing  === true,
+                    third_country: cats.third_country === true
                 }
             };
 
             this.state.consent = consent;
 
-            // Freigeben, was jetzt erlaubt ist (Fonts/CSS = funktional). Bei reiner
-            // Ablehnung Tracking-Cookies entfernen.
+            // Freigeben, was jetzt erlaubt ist. Bei reiner Ablehnung
+            // Tracking-Cookies entfernen.
             this.unblockElements();
             if (!accepted) {
                 this.deleteCookies();
@@ -127,7 +207,7 @@
 
             console.log('[Complyo] Consent via Banner-Event übernommen:', consent);
         },
-        
+
         /**
          * Load configuration from API
          */
@@ -150,47 +230,15 @@
                 console.error('[Complyo] Failed to load configuration:', error);
             }
         },
-        
+
         /**
-         * Build blocking patterns from service configuration
+         * Build blocking patterns
          */
         buildBlockingPatterns: function(services) {
-            // In production, this would fetch detailed service info from API
-            // For now, we use common patterns
-            
-            this.config.blockedScripts = [
-                // Analytics
-                /googletagmanager\.com\/gtag/,
-                /google-analytics\.com/,
-                /googletagmanager\.com\/gtm/,
-                /static\.hotjar\.com/,
-                /matomo\.js/,
-                /plausible\.io/,
-                
-                // Marketing
-                /connect\.facebook\.net/,
-                /facebook\.com\/tr/,
-                /googleadservices\.com/,
-                /doubleclick\.net/,
-                /snap\.licdn\.com/,
-                /analytics\.tiktok\.com/,
-                /platform\.twitter\.com/,
-                
-                // Chat
-                /widget\.intercom\.io/,
-                /static\.zdassets\.com/,
-                /embed\.tawk\.to/,
-                /client\.crisp\.chat/
-            ];
-            
-            this.config.blockedIframes = [
-                /youtube\.com\/embed/,
-                /player\.vimeo\.com/,
-                /instagram\.com\/embed/,
-                /google\.com\/maps\/embed/,
-                /twitter\.com\/widgets/,
-                /platform\.twitter\.com/
-            ];
+            // Flache Listen (Rueckwaertskompatibel); die Kategorie steht in SCRIPT_RULES.
+            this.config.blockedScripts = [].concat(
+                SCRIPT_RULES.analytics, SCRIPT_RULES.marketing, SCRIPT_RULES.functional);
+            this.config.blockedIframes = [].concat(IFRAME_RULES.marketing, IFRAME_RULES.functional);
 
             // Externe Font-/CSS-Hosts: laden via <link rel="stylesheet">,
             // <link as="font">/Preload oder @import und uebertragen die IP des
@@ -208,171 +256,231 @@
                 /cloud\.typography\.com/,      // Hoefler&Co
                 /fonts\.bunny\.net/            // Bunny Fonts (extern)
             ];
-            
+
             this.config.cookiesToDelete = [
                 // Analytics
                 '_ga', '_gid', '_gat', '_gat_gtag_', '_ga_',
                 '_pk_id', '_pk_ses',
                 '_hjid', '_hjSessionUser_', '_hjSession_',
-                
-                // Marketing  
+
+                // Marketing
                 '_fbp', '_fbc', 'fr',
                 '_gcl_au', '_gcl_aw', '_gcl_dc',
                 'li_fat_id', 'lidc',
                 '_ttp',
                 'personalization_id',
-                
+
                 // Others
                 'VISITOR_INFO1_LIVE', 'YSC'
             ];
         },
-        
+
+        /**
+         * Kategorie einer Skript-URL (analytics | marketing | functional) oder null.
+         */
+        categoryForScript: function(src) {
+            if (!src) return null;
+            const u = String(src);
+            const cats = ['analytics', 'marketing', 'functional'];
+            for (let i = 0; i < cats.length; i++) {
+                if (SCRIPT_RULES[cats[i]].some(re => re.test(u))) return cats[i];
+            }
+            return null;
+        },
+
+        categoryForIframe: function(src) {
+            if (!src) return null;
+            const u = String(src);
+            const cats = ['marketing', 'functional'];
+            for (let i = 0; i < cats.length; i++) {
+                if (IFRAME_RULES[cats[i]].some(re => re.test(u))) return cats[i];
+            }
+            return null;
+        },
+
+        /**
+         * Ist diese Kategorie fuer diese URL freigegeben? Beruecksichtigt die
+         * gesonderte Drittland-Einwilligung fuer US-Anbieter.
+         */
+        isAllowed: function(category, url) {
+            const c = this.state.consent;
+            if (!c || !c.consent_categories) return false;
+            const cat = c.consent_categories;
+            if (cat[category] !== true) return false;
+            if (url && US_HOSTS.test(this.hostOf(url)) && cat.third_country !== true) return false;
+            return true;
+        },
+
+        hostOf: function(url) {
+            try { return new URL(String(url), document.baseURI).hostname; } catch (e) { return ''; }
+        },
+
         /**
          * Block scripts early (before DOMContentLoaded)
          */
         blockScriptsEarly: function() {
             const self = this;
-            
-            // Intercept script creation
-            const originalCreateElement = document.createElement;
-            document.createElement = function(tagName) {
-                const element = originalCreateElement.call(document, tagName);
-                
-                if (tagName.toLowerCase() === 'script') {
-                    const originalSetAttribute = element.setAttribute;
-                    element.setAttribute = function(name, value) {
-                        if (name === 'src' && self.shouldBlockScript(value)) {
-                            console.log('[Complyo] 🚫 Blocked script:', value);
 
-                            // Change type to prevent execution
-                            originalSetAttribute.call(this, 'type', 'text/plain');
-                            originalSetAttribute.call(this, 'data-complyo-src', value);
-                            originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
-
-                            self.state.blockedElements.push(this);
+            // Haken auf den PROTOTYPEN statt auf document.createElement: so greifen sie fuer jedes
+            // Element, egal wie es entsteht (createElement, cloneNode, innerHTML-Fragmente,
+            // Slider-Code, der createElement vorher gesichert hat).
+            if (scriptSrcDesc && scriptSrcDesc.set && scriptSrcDesc.get) {
+                Object.defineProperty(HTMLScriptElement.prototype, 'src', {
+                    configurable: true,
+                    enumerable: true,
+                    get: function() { return scriptSrcDesc.get.call(this); },
+                    set: function(value) {
+                        if (self.shouldBlockScript(value)) {
+                            self.neutralizeScript(this, value);
                             return;
                         }
-                        originalSetAttribute.call(this, name, value);
-                    };
-                    // el.src = … (so injizieren GA/GTM/Meta real) ebenfalls abfangen
-                    const srcDesc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
-                    if (srcDesc && srcDesc.set && srcDesc.get) {
-                        Object.defineProperty(element, 'src', {
-                            configurable: true,
-                            enumerable: true,
-                            get: function() { return srcDesc.get.call(this); },
-                            set: function(value) {
-                                if (self.shouldBlockScript(value)) {
-                                    console.log('[Complyo] 🚫 Blocked script:', value);
-                                    originalSetAttribute.call(this, 'type', 'text/plain');
-                                    originalSetAttribute.call(this, 'data-complyo-src', value);
-                                    originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
-                                    self.state.blockedElements.push(this);
-                                    return;
-                                }
-                                srcDesc.set.call(this, value);
-                            }
-                        });
+                        scriptSrcDesc.set.call(this, value);
                     }
-                }
-
-                // Dynamisch erzeugte <link rel="stylesheet"> / <link as="font">:
-                // href abfangen, bevor der Browser den Request startet.
-                if (tagName.toLowerCase() === 'link') {
-                    const originalSetAttribute = element.setAttribute;
-                    element.setAttribute = function(name, value) {
-                        if (name === 'href' && self.shouldBlockStylesheet(value)) {
-                            console.log('[Complyo] 🚫 Blocked stylesheet/font:', value);
-                            originalSetAttribute.call(this, 'data-complyo-href', value);
-                            originalSetAttribute.call(this, 'data-complyo-blocked', 'true');
-                            originalSetAttribute.call(this, 'media', 'not all');
-                            self.state.blockedElements.push(this);
-                            return;
-                        }
-                        originalSetAttribute.call(this, name, value);
-                    };
-                    const hrefDesc = Object.getOwnPropertyDescriptor(HTMLLinkElement.prototype, 'href');
-                    if (hrefDesc && hrefDesc.set) {
-                        Object.defineProperty(element, 'href', {
-                            configurable: true,
-                            get: function() { return hrefDesc.get.call(this); },
-                            set: function(value) {
-                                if (self.shouldBlockStylesheet(value)) {
-                                    console.log('[Complyo] 🚫 Blocked stylesheet/font:', value);
-                                    element.setAttribute('href', value); // laeuft in Hook oben
-                                    return;
-                                }
-                                hrefDesc.set.call(this, value);
-                            }
-                        });
-                    }
-                }
-
-                return element;
-            };
-            
-            // Sofort vorhandene (bis hier geparste) Scripts & Styles neutralisieren …
-            this.scanAndBlockScripts();
-            this.scanAndBlockStyles();
-            // … und erneut nach vollstaendigem Parsen des restlichen DOM.
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => {
-                    this.scanAndBlockScripts();
-                    this.scanAndBlockStyles();
                 });
             }
+            if (linkHrefDesc && linkHrefDesc.set && linkHrefDesc.get) {
+                Object.defineProperty(HTMLLinkElement.prototype, 'href', {
+                    configurable: true,
+                    enumerable: true,
+                    get: function() { return linkHrefDesc.get.call(this); },
+                    set: function(value) {
+                        if (self.shouldBlockStylesheet(value)) {
+                            self.neutralizeLink(this, value);
+                            return;
+                        }
+                        linkHrefDesc.set.call(this, value);
+                    }
+                });
+            }
+            if (iframeSrcDesc && iframeSrcDesc.set && iframeSrcDesc.get) {
+                Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+                    configurable: true,
+                    enumerable: true,
+                    get: function() { return iframeSrcDesc.get.call(this); },
+                    set: function(value) {
+                        if (self.shouldBlockIframe(value)) {
+                            self.neutralizeIframe(this, value);
+                            return;
+                        }
+                        iframeSrcDesc.set.call(this, value);
+                    }
+                });
+            }
+            Element.prototype.setAttribute = function(name, value) {
+                const n = String(name).toLowerCase();
+                if (n === 'src' && this instanceof HTMLScriptElement && self.shouldBlockScript(value)) {
+                    self.neutralizeScript(this, value);
+                    return;
+                }
+                if (n === 'src' && this instanceof HTMLIFrameElement && self.shouldBlockIframe(value)) {
+                    self.neutralizeIframe(this, value);
+                    return;
+                }
+                if (n === 'href' && this instanceof HTMLLinkElement && self.shouldBlockStylesheet(value)) {
+                    self.neutralizeLink(this, value);
+                    return;
+                }
+                return nativeSetAttribute.call(this, name, value);
+            };
+
+            // Sofort vorhandene (bis hier geparste) Elemente neutralisieren …
+            this.scanAndBlockScripts();
+            this.scanAndBlockIframes();
+            this.scanAndBlockStyles();
+            // … und erneut nach vollstaendigem Parsen des restlichen DOM.
+            const nachParsen = () => {
+                this.scanAndBlockScripts();
+                this.scanAndBlockIframes();
+                this.scanAndBlockStyles();
+                // Schon eingewilligt (wiederkehrender Besucher): server-seitig neutralisierte
+                // Elemente jetzt freigeben, alle eingewilligten Kategorien.
+                if (this.state.consent) this.unblockElements();
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', nachParsen);
+            } else {
+                nachParsen();
+            }
         },
-        
+
+        neutralizeScript: function(el, src) {
+            console.log('[Complyo] 🚫 Blocked script:', src);
+            const cat = this.categoryForScript(src) || 'marketing';
+            nativeSetAttribute.call(el, 'type', 'text/plain');
+            nativeSetAttribute.call(el, 'data-complyo-src', String(src));
+            nativeSetAttribute.call(el, 'data-complyo-consent', cat);
+            nativeSetAttribute.call(el, 'data-complyo-blocked', 'true');
+            nativeRemoveAttribute.call(el, 'src');
+            this.state.blockedElements.push(el);
+        },
+
+        neutralizeIframe: function(el, src) {
+            console.log('[Complyo] 🚫 Blocked iframe:', src);
+            const cat = this.categoryForIframe(src) || 'marketing';
+            nativeSetAttribute.call(el, 'data-complyo-src', String(src));
+            nativeSetAttribute.call(el, 'data-complyo-consent', cat);
+            nativeSetAttribute.call(el, 'data-complyo-blocked', 'true');
+            nativeRemoveAttribute.call(el, 'src');
+            this.state.blockedElements.push(el);
+        },
+
+        neutralizeLink: function(el, href) {
+            console.log('[Complyo] 🚫 Blocked stylesheet/font:', href);
+            nativeSetAttribute.call(el, 'data-complyo-href', String(href));
+            nativeSetAttribute.call(el, 'data-complyo-blocked', 'true');
+            nativeSetAttribute.call(el, 'media', 'not all');
+            nativeRemoveAttribute.call(el, 'href');
+            this.state.blockedElements.push(el);
+        },
+
         /**
          * Scan and block existing scripts
          */
         scanAndBlockScripts: function() {
             const scripts = document.querySelectorAll('script[src]');
-            
+
             scripts.forEach(script => {
-                const src = script.getAttribute('src');
+                const src = nativeGetAttribute.call(script, 'src');
                 if (src && this.shouldBlockScript(src)) {
-                    if (script.getAttribute('data-complyo-blocked') !== 'true') {
+                    if (nativeGetAttribute.call(script, 'data-complyo-blocked') !== 'true') {
                         console.log('[Complyo] 🚫 Blocking existing script:', src);
-                        
-                        script.type = 'text/plain';
-                        script.setAttribute('data-complyo-src', src);
-                        script.setAttribute('data-complyo-blocked', 'true');
-                        script.removeAttribute('src');
-                        
-                        this.state.blockedElements.push(script);
+                        this.neutralizeScript(script, src);
                     }
                 }
             });
         },
-        
+
+        /**
+         * Vorhandene iframes mit blockierten Zielen neutralisieren; den sichtbaren
+         * Platzhalter (Banner-Gestaltung) baut der Content-Blocker des Widgets.
+         */
+        scanAndBlockIframes: function() {
+            document.querySelectorAll('iframe[src]').forEach(frame => {
+                const src = nativeGetAttribute.call(frame, 'src');
+                if (src && nativeGetAttribute.call(frame, 'data-complyo-blocked') !== 'true' &&
+                        this.shouldBlockIframe(src)) {
+                    this.neutralizeIframe(frame, src);
+                }
+            });
+        },
+
         /**
          * Check if script should be blocked
          */
         shouldBlockScript: function(src) {
-            if (!src) return false;
-            
-            // Don't block if consent given
-            if (this.state.consent && this.hasConsentForScript(src)) {
-                return false;
-            }
-            
-            // Check against patterns
-            return this.config.blockedScripts.some(pattern => pattern.test(src));
+            const cat = this.categoryForScript(src);
+            if (!cat) return false;
+            // Eingewilligte Kategorie (und ggf. Drittland) -> frei
+            return !this.isAllowed(cat, src);
         },
-        
+
         /**
-         * Check if script should be blocked based on iframe src
+         * Check if iframe should be blocked based on iframe src
          */
         shouldBlockIframe: function(src) {
-            if (!src) return false;
-            
-            // Don't block if consent given
-            if (this.state.consent && this.hasConsentForIframe(src)) {
-                return false;
-            }
-            
-            return this.config.blockedIframes.some(pattern => pattern.test(src));
+            const cat = this.categoryForIframe(src);
+            if (!cat) return false;
+            return !this.isAllowed(cat, src);
         },
 
         /**
@@ -380,10 +488,8 @@
          */
         shouldBlockStylesheet: function(href) {
             if (!href) return false;
-            if (this.state.consent && this.hasConsentForStyle()) {
-                return false;
-            }
-            return this.config.blockedStyles.some(pattern => pattern.test(href));
+            if (!this.config.blockedStyles.some(pattern => pattern.test(href))) return false;
+            return !this.isAllowed('functional', href);
         },
 
         /**
@@ -405,23 +511,17 @@
         scanAndBlockStyles: function() {
             // 1) <link>-Elemente (stylesheet, preload/as=font, prefetch, dns-prefetch)
             document.querySelectorAll('link[href]').forEach(link => {
-                if (link.getAttribute('data-complyo-blocked') === 'true') return;
-                const href = link.getAttribute('href');
-                const rel  = (link.getAttribute('rel') || '').toLowerCase();
-                const as   = (link.getAttribute('as')  || '').toLowerCase();
+                if (nativeGetAttribute.call(link, 'data-complyo-blocked') === 'true') return;
+                const href = nativeGetAttribute.call(link, 'href');
+                const rel  = (nativeGetAttribute.call(link, 'rel') || '').toLowerCase();
+                const as   = (nativeGetAttribute.call(link, 'as')  || '').toLowerCase();
                 const isStyleish = rel.includes('stylesheet') || as === 'font' ||
                                    rel === 'preload' || rel === 'prefetch' ||
                                    rel === 'preconnect' || rel === 'dns-prefetch';
                 if (isStyleish && this.shouldBlockStylesheet(href)) {
                     console.log('[Complyo] 🚫 Blocking stylesheet/font link:', href);
-                    // href entfernen stoppt den Request (sofern noch nicht fertig);
-                    // media="not all" verhindert das Anwenden bereits geladener CSS.
-                    link.setAttribute('data-complyo-href', href);
-                    link.setAttribute('data-complyo-rel', link.getAttribute('rel') || '');
-                    link.setAttribute('data-complyo-blocked', 'true');
-                    link.setAttribute('media', 'not all');
-                    link.removeAttribute('href');
-                    this.state.blockedElements.push(link);
+                    nativeSetAttribute.call(link, 'data-complyo-rel', nativeGetAttribute.call(link, 'rel') || '');
+                    this.neutralizeLink(link, href);
                 }
             });
 
@@ -449,236 +549,178 @@
         },
 
         /**
-         * Check if user has consent for this script
+         * Alte Schnittstelle (Rueckwaertskompatibel): Einwilligung fuer ein Skript.
          */
         hasConsentForScript: function(src) {
-            if (!this.state.consent) return false;
-            
-            const categories = this.state.consent.consent_categories;
-            
-            // Analytics
-            if (categories.analytics && /google-analytics|googletagmanager|hotjar|matomo/.test(src)) {
-                return true;
-            }
-            
-            // Marketing
-            if (categories.marketing && /facebook|doubleclick|linkedin|tiktok|twitter/.test(src)) {
-                return true;
-            }
-            
-            // Functional
-            if (categories.functional && /intercom|zendesk|tawk|crisp/.test(src)) {
-                return true;
-            }
-            
-            return false;
+            const cat = this.categoryForScript(src);
+            return !!cat && this.isAllowed(cat, src);
         },
-        
+
         /**
-         * Check if user has consent for this iframe
+         * Alte Schnittstelle: Einwilligung fuer einen iframe.
          */
         hasConsentForIframe: function(src) {
-            if (!this.state.consent) return false;
-            
-            const categories = this.state.consent.consent_categories;
-            
-            // Functional content
-            if (categories.functional && /youtube|vimeo|maps\.google|openstreetmap/.test(src)) {
-                return true;
-            }
-            
-            // Marketing content
-            if (categories.marketing && /instagram|twitter|facebook/.test(src)) {
-                return true;
-            }
-            
-            return false;
+            const cat = this.categoryForIframe(src);
+            return !!cat && this.isAllowed(cat, src);
         },
-        
+
         /**
          * Observe DOM for dynamically added elements
          */
         observeDOM: function() {
             const self = this;
-            
+
+            const pruefe = (node) => {
+                if (node.nodeType !== 1) return;
+                if (node.tagName === 'SCRIPT') {
+                    const src = nativeGetAttribute.call(node, 'src');
+                    if (src && self.shouldBlockScript(src) &&
+                            nativeGetAttribute.call(node, 'data-complyo-blocked') !== 'true') {
+                        console.log('[Complyo] 🚫 Blocking dynamically added script:', src);
+                        self.neutralizeScript(node, src);
+                    }
+                } else if (node.tagName === 'IFRAME') {
+                    const src = nativeGetAttribute.call(node, 'src');
+                    if (src && self.shouldBlockIframe(src) &&
+                            nativeGetAttribute.call(node, 'data-complyo-blocked') !== 'true') {
+                        console.log('[Complyo] 🚫 Blocking iframe:', src);
+                        self.neutralizeIframe(node, src);
+                    }
+                } else if (node.tagName === 'LINK' || node.tagName === 'STYLE') {
+                    self.scanAndBlockStyles();
+                }
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('script[src], iframe[src]').forEach(pruefe);
+                    if (node.querySelector('link[href], style')) {
+                        self.scanAndBlockStyles();
+                    }
+                }
+            };
+
             const observer = new MutationObserver(mutations => {
-                mutations.forEach(mutation => {
-                    mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === 1) { // Element node
-                            // Check scripts
-                            if (node.tagName === 'SCRIPT') {
-                                const src = node.getAttribute('src');
-                                if (src && self.shouldBlockScript(src)) {
-                                    console.log('[Complyo] 🚫 Blocking dynamically added script:', src);
-                                    node.type = 'text/plain';
-                                    node.setAttribute('data-complyo-src', src);
-                                    node.setAttribute('data-complyo-blocked', 'true');
-                                    node.removeAttribute('src');
-                                    self.state.blockedElements.push(node);
-                                }
-                            }
-                            
-                            // Check iframes
-                            if (node.tagName === 'IFRAME') {
-                                const src = node.getAttribute('src');
-                                if (src && self.shouldBlockIframe(src)) {
-                                    console.log('[Complyo] 🚫 Blocking iframe:', src);
-                                    self.replaceIframeWithPlaceholder(node);
-                                }
-                            }
-
-                            // Externe Font-/CSS-Links und @import-Styles
-                            if (node.tagName === 'LINK' || node.tagName === 'STYLE') {
-                                self.scanAndBlockStyles();
-                            }
-
-                            // Check child elements
-                            if (node.querySelectorAll) {
-                                node.querySelectorAll('script[src], iframe[src]').forEach(child => {
-                                    const src = child.getAttribute('src');
-                                    if (child.tagName === 'SCRIPT' && self.shouldBlockScript(src)) {
-                                        child.type = 'text/plain';
-                                        child.setAttribute('data-complyo-src', src);
-                                        child.setAttribute('data-complyo-blocked', 'true');
-                                        child.removeAttribute('src');
-                                        self.state.blockedElements.push(child);
-                                    } else if (child.tagName === 'IFRAME' && self.shouldBlockIframe(src)) {
-                                        self.replaceIframeWithPlaceholder(child);
-                                    }
-                                });
-                                if (node.querySelector('link[href], style')) {
-                                    self.scanAndBlockStyles();
-                                }
-                            }
-                        }
-                    });
-                });
+                mutations.forEach(mutation => mutation.addedNodes.forEach(pruefe));
             });
-            
+
             observer.observe(document.documentElement, {
                 childList: true,
                 subtree: true
             });
         },
-        
+
         /**
-         * Replace iframe with consent placeholder
-         */
-        replaceIframeWithPlaceholder: function(iframe) {
-            const src = iframe.getAttribute('src');
-            const width = iframe.getAttribute('width') || '100%';
-            const height = iframe.getAttribute('height') || '400px';
-            
-            const placeholder = document.createElement('div');
-            placeholder.className = 'complyo-iframe-placeholder';
-            placeholder.style.cssText = `
-                width: ${width};
-                height: ${height};
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex-direction: column;
-                color: white;
-                padding: 20px;
-                text-align: center;
-                border-radius: 8px;
-                cursor: pointer;
-            `;
-            
-            placeholder.innerHTML = `
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                </svg>
-                <h3 style="margin: 16px 0 8px 0; font-size: 18px; font-weight: 600;">Externe Inhalte blockiert</h3>
-                <p style="margin: 0 0 16px 0; font-size: 14px; opacity: 0.9;">Zum Anzeigen dieser Inhalte benötigen wir Ihre Zustimmung.</p>
-                <button style="
-                    background: white;
-                    color: #667eea;
-                    border: none;
-                    padding: 10px 24px;
-                    border-radius: 6px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    font-size: 14px;
-                ">Inhalte entsperren</button>
-            `;
-            
-            placeholder.setAttribute('data-complyo-iframe-src', src);
-            placeholder.setAttribute('data-complyo-blocked', 'true');
-            
-            placeholder.addEventListener('click', () => {
-                window.ComplyoBanner?.showBanner();
-            });
-            
-            iframe.parentNode.replaceChild(placeholder, iframe);
-            this.state.blockedElements.push(placeholder);
-        },
-        
-        /**
-         * Unblock all blocked elements
+         * Unblock all blocked elements: sowohl die hier neutralisierten als auch die
+         * serverseitig (WordPress-Plugin) vorab neutralisierten Skripte und iframes.
          */
         unblockElements: function() {
             console.log('[Complyo] ✅ Unblocking elements...');
-            
+
+            // Serverseitig neutralisierte Elemente einsammeln (nicht ueber den Haken entstanden).
+            document.querySelectorAll(
+                'script[type="text/plain"][data-complyo-consent], iframe[data-complyo-src][data-complyo-blocked="true"]'
+            ).forEach(el => {
+                if (this.state.blockedElements.indexOf(el) === -1) this.state.blockedElements.push(el);
+            });
+
+            const rest = [];
             this.state.blockedElements.forEach(element => {
-                if (element.tagName === 'SCRIPT') {
-                    const originalSrc = element.getAttribute('data-complyo-src');
-                    if (originalSrc && this.hasConsentForScript(originalSrc)) {
-                        console.log('[Complyo] ✅ Unblocking script:', originalSrc);
-                        element.type = 'text/javascript';
-                        element.src = originalSrc;
-                        element.removeAttribute('data-complyo-blocked');
-                    }
-                } else if (element.className === 'complyo-iframe-placeholder') {
-                    const originalSrc = element.getAttribute('data-complyo-iframe-src');
-                    if (originalSrc && this.hasConsentForIframe(originalSrc)) {
-                        console.log('[Complyo] ✅ Unblocking iframe:', originalSrc);
-                        const iframe = document.createElement('iframe');
-                        iframe.src = originalSrc;
-                        iframe.width = element.style.width;
-                        iframe.height = element.style.height;
-                        element.parentNode.replaceChild(iframe, element);
-                    }
-                } else if (element.tagName === 'LINK') {
-                    const originalHref = element.getAttribute('data-complyo-href');
-                    if (originalHref && this.hasConsentForStyle()) {
-                        console.log('[Complyo] ✅ Unblocking stylesheet/font:', originalHref);
-                        const originalRel = element.getAttribute('data-complyo-rel');
-                        element.removeAttribute('media');
-                        if (originalRel) element.setAttribute('rel', originalRel);
-                        element.setAttribute('href', originalHref);
-                        element.removeAttribute('data-complyo-blocked');
-                    }
-                } else if (element.tagName === 'STYLE') {
-                    const originalCss = element.getAttribute('data-complyo-css');
-                    if (originalCss && this.hasConsentForStyle()) {
-                        console.log('[Complyo] ✅ Unblocking @import styles');
-                        element.textContent = originalCss;
-                        element.removeAttribute('data-complyo-blocked');
-                    }
+                if (!this.releaseElement(element)) rest.push(element);
+            });
+            this.state.blockedElements = rest;
+        },
+
+        /**
+         * Gibt ein Element frei, wenn seine Kategorie eingewilligt ist.
+         * true = erledigt (frei oder nicht mehr im Dokument), false = bleibt blockiert.
+         */
+        releaseElement: function(element) {
+            // Platzhalter des Content-Blockers sind kein neutralisiertes Original.
+            if (!element.isConnected) return true;
+
+            if (element.tagName === 'SCRIPT') {
+                const src = nativeGetAttribute.call(element, 'data-complyo-src');
+                const cat = nativeGetAttribute.call(element, 'data-complyo-consent') ||
+                    (src && this.categoryForScript(src));
+                if (!cat || !this.isAllowed(cat, src || '')) return false;
+                this.releaseScript(element, src);
+                return true;
+            }
+
+            if (element.tagName === 'IFRAME') {
+                const src = nativeGetAttribute.call(element, 'data-complyo-src');
+                const cat = nativeGetAttribute.call(element, 'data-complyo-consent') ||
+                    (src && this.categoryForIframe(src));
+                if (!src || !cat || !this.isAllowed(cat, src)) return false;
+                console.log('[Complyo] ✅ Unblocking iframe:', src);
+                nativeRemoveAttribute.call(element, 'data-complyo-blocked');
+                nativeRemoveAttribute.call(element, 'data-complyo-src');
+                nativeRemoveAttribute.call(element, 'data-complyo-consent');
+                element.style.display = '';
+                iframeSrcDesc.set.call(element, src);
+                return true;
+            }
+
+            if (element.tagName === 'LINK') {
+                const originalHref = nativeGetAttribute.call(element, 'data-complyo-href');
+                if (!originalHref || !this.isAllowed('functional', originalHref)) return false;
+                console.log('[Complyo] ✅ Unblocking stylesheet/font:', originalHref);
+                const originalRel = nativeGetAttribute.call(element, 'data-complyo-rel');
+                nativeRemoveAttribute.call(element, 'media');
+                if (originalRel) nativeSetAttribute.call(element, 'rel', originalRel);
+                nativeRemoveAttribute.call(element, 'data-complyo-blocked');
+                linkHrefDesc.set.call(element, originalHref);
+                return true;
+            }
+
+            if (element.tagName === 'STYLE') {
+                const originalCss = nativeGetAttribute.call(element, 'data-complyo-css');
+                if (!originalCss || !this.hasConsentForStyle()) return false;
+                console.log('[Complyo] ✅ Unblocking @import styles');
+                element.textContent = originalCss;
+                nativeRemoveAttribute.call(element, 'data-complyo-blocked');
+                return true;
+            }
+
+            return true;
+        },
+
+        /**
+         * Skript freigeben: IMMER durch ein neues Element ersetzen. Ein Skript, das der
+         * Parser mit type="text/plain" angelegt hat, laeuft nicht, wenn man nachtraeglich
+         * type/src setzt — nur ein frisch erzeugtes tut es. Inline-Code wird 1:1 uebernommen.
+         */
+        releaseScript: function(element, src) {
+            if (!element.parentNode) return;
+            const script = document.createElement('script');
+            Array.prototype.forEach.call(element.attributes, attr => {
+                if (attr.name.indexOf('data-complyo') !== 0 && attr.name !== 'type') {
+                    nativeSetAttribute.call(script, attr.name, attr.value);
                 }
             });
+            if (src) {
+                console.log('[Complyo] ✅ Unblocking script:', src);
+                scriptSrcDesc.set.call(script, src);
+            } else {
+                script.text = element.textContent || '';
+            }
+            element.parentNode.replaceChild(script, element);
         },
-        
+
         /**
          * Delete cookies based on consent
          */
         deleteCookies: function() {
             console.log('[Complyo] 🗑️ Deleting cookies...');
-            
+
             this.config.cookiesToDelete.forEach(cookieName => {
                 // Delete cookie
                 document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
                 document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
-                
+
                 // Also try with leading dot
                 const domain = window.location.hostname.split('.').slice(-2).join('.');
                 document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${domain};`;
             });
-            
+
             // Delete localStorage items
             this.config.localStorageKeys.forEach(key => {
                 try {
@@ -686,48 +728,62 @@
                 } catch (e) {}
             });
         },
-        
+
         /**
-         * Load existing consent
+         * Load existing consent: erst der Schluessel des Banners (localStorage), dann das
+         * aeltere Cookie. Reihenfolge, damit wiederkehrende Besucher mit Banner-Einwilligung
+         * von der ersten Zeile an frei sind.
          */
         loadConsent: function() {
             try {
+                let stored = null;
+                try { stored = localStorage.getItem('complyo_cookie_consent'); } catch (e) {}
+                if (stored) {
+                    const c = JSON.parse(stored);
+                    this.state.consent = {
+                        accepted: !!(c.functional || c.analytics || c.marketing),
+                        consent_categories: {
+                            necessary: true,
+                            functional: c.functional === true,
+                            analytics: c.analytics === true,
+                            marketing: c.marketing === true,
+                            third_country: c.third_country === true
+                        }
+                    };
+                    console.log('[Complyo] Loaded existing consent (Banner):', this.state.consent);
+                    return;
+                }
                 const consentCookie = this.getCookie('complyo_consent');
                 if (consentCookie) {
                     this.state.consent = JSON.parse(decodeURIComponent(consentCookie));
                     console.log('[Complyo] Loaded existing consent:', this.state.consent);
-                    
-                    // Unblock elements if consent given
-                    if (this.state.consent.consent_categories) {
-                        this.unblockElements();
-                    }
                 }
             } catch (error) {
                 console.error('[Complyo] Failed to load consent:', error);
             }
         },
-        
+
         /**
          * Update consent
          */
         updateConsent: function(consent) {
             this.state.consent = consent;
-            
+
             // Store consent cookie
             const expires = new Date();
             expires.setFullYear(expires.getFullYear() + 1);
             document.cookie = `complyo_consent=${encodeURIComponent(JSON.stringify(consent))}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
-            
+
             // Unblock or delete based on consent
             if (consent.accepted) {
                 this.unblockElements();
             } else {
                 this.deleteCookies();
             }
-            
+
             console.log('[Complyo] Consent updated:', consent);
         },
-        
+
         /**
          * Get cookie value
          */
@@ -738,16 +794,15 @@
             return null;
         }
     };
-    
+
     // SOFORT initialisieren (Script laeuft synchron im <head>): nur so stehen
-    // createElement-Hook und MutationObserver, bevor der Parser nachfolgende
+    // die Haken und der MutationObserver, bevor der Parser nachfolgende
     // <link>/<script>-Tags erreicht. Ein Warten auf DOMContentLoaded waere zu
     // spaet — statische Font-/Tracking-Ressourcen waeren dann laengst geladen.
     // init() startet selbst einen erneuten Scan auf DOMContentLoaded.
     ComplyoCookieBlocker.init();
-    
+
     // Export to global scope
     window.ComplyoCookieBlocker = ComplyoCookieBlocker;
-    
-})();
 
+})();
