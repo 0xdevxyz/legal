@@ -881,6 +881,23 @@
         }
 
         /**
+         * Das Complyo-Logo im Footer in der Variante, die auf dem Bannergrund
+         * lesbar ist: schwarze Schrift (logo-dark-trim) auf hellem, weisse
+         * (logo-light-trim) auf dunklem Grund. Das Schild ist in beiden Gold.
+         * Vorher stand fest die dunkle Variante, auf einem dunklen Banner
+         * war die Schrift unsichtbar.
+         */
+        brandingLogoUrl() {
+            // Dieselbe Regel wie fuer jede Schrift auf einer Flaeche im Banner:
+            // verlangt der Grund weisse Schrift, ist er dunkel.
+            // Nicht lesbare Angabe: wie bisher die Variante fuer hellen Grund.
+            const bg = this.config.bgColor;
+            const dunkel = this.constructor._leuchtdichte(bg) !== null &&
+                this.constructor.lesbareSchrift(bg).toLowerCase() === '#ffffff';
+            return 'https://complyo.de/' + (dunkel ? 'logo-light-trim.png' : 'logo-dark-trim.png');
+        }
+
+        /**
          * Gemeinsame Gestaltung aller Complyo-Oberflaechen auf der Kundenseite.
          *
          * Der Banner ist die Vorlage. Alles, was das Produkt sonst noch
@@ -2548,7 +2565,7 @@
                         <div class="complyo-branding">
                             <span class="complyo-branding-prefix">Powered by</span>
                             <a class="complyo-branding-link" href="https://complyo.de" target="_blank" rel="noopener" aria-label="complyo">
-                                <img class="complyo-branding-logo" src="https://complyo.de/logo-dark-trim.png" alt="complyo" height="14" loading="lazy" decoding="async" />
+                                <img class="complyo-branding-logo" src="${this.brandingLogoUrl()}" alt="complyo" height="14" loading="lazy" decoding="async" />
                             </a>
                         </div>
                     ` : ''}

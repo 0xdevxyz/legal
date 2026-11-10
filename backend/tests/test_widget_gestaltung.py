@@ -128,3 +128,15 @@ class TestInhaltLadenLaeuftUeberDenBanner:
     def test_knopf_ist_nie_tot(self):
         # Ohne Banner wird wenigstens diese eine Einbettung geladen.
         assert "this.unblockElement(placeholder, original)" in PLATZHALTER
+
+
+class TestFooterLogoNachHintergrund:
+    def test_logo_variante_folgt_dem_bannergrund(self):
+        # Footer-Logo (Powered by): schwarze Schrift auf hellem, weisse auf dunklem Grund.
+        assert "brandingLogoUrl()" in BANNER
+        m = _bereich(BANNER, "        brandingLogoUrl() {", "        /**\n         * Gemeinsame Gestaltung")
+        assert "logo-light-trim.png" in m and "logo-dark-trim.png" in m
+        assert "lesbareSchrift(this.config.bgColor)" in m
+
+    def test_keine_feste_logodatei_mehr_im_footer(self):
+        assert 'src="https://complyo.de/logo-dark-trim.png"' not in BANNER
