@@ -1087,6 +1087,22 @@
             });
         }
 
+        /**
+         * Symbol als Vektorgrafik, nie als Emoji: WordPress ersetzt Emoji im Text durch Bilder von
+         * s.w.org und fragt sie VOR der Einwilligung ab (gemessen 10.11.2026, Netlog reinhardt.coffee:
+         * 25b6.svg). Farbe aus den Banner-Variablen.
+         */
+        placeholderIcon(service) {
+            const name = String((service && service.name) || '');
+            const pfad = /maps|karte/i.test(name)
+                ? 'M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'
+                : (service && service.generic)
+                    ? 'M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 0 1 6 0v3H9z'
+                    : 'M8 5v14l11-7z';
+            return '<svg viewBox="0 0 24 24" width="40" height="40" focusable="false" aria-hidden="true" ' +
+                'style="display:block;margin:0 auto;fill:var(--complyo-primary,#1f2937)"><path d="' + pfad + '"/></svg>';
+        }
+
         createVisualPlaceholder(iframe, service, category) {
             this.injectPlaceholderStyles();
 
@@ -1108,7 +1124,7 @@
             placeholder.setAttribute('data-complyo-embed-src', src);
 
             placeholder.innerHTML = `
-                <div class="complyo-placeholder-icon" aria-hidden="true">${complyoEsc(service.icon)}</div>
+                <div class="complyo-placeholder-icon" aria-hidden="true">${this.placeholderIcon(service)}</div>
                 <h2 class="complyo-placeholder-title">${complyoEsc(service.name)}</h2>
                 <p class="complyo-placeholder-text"></p>
                 <button type="button" class="complyo-placeholder-btn">Inhalt laden</button>

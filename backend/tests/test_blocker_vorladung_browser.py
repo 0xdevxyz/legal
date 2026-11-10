@@ -356,3 +356,16 @@ class TestEinzelnEntsperren:
             assert fehler == [], fehler
         finally:
             ctx.close()
+
+
+class TestKeinEmojiImPlatzhalter:
+    def test_symbol_ist_vektorgrafik_kein_emoji(self, umgebung):
+        """WordPress ersetzt Emoji durch Bilder von s.w.org und fragt sie vor der Einwilligung ab
+        (Netlog reinhardt.coffee 10.11.2026: 25b6.svg zu dem Play-Symbol des Platzhalters)."""
+        page, ctx, anfragen, _ = _seite(umgebung, "plugin_markup")
+        try:
+            r = page.evaluate("""() => Array.from(document.querySelectorAll('.complyo-placeholder-icon')).map(
+              e => ({text: e.textContent.trim(), svg: !!e.querySelector('svg')}))""")
+            assert r and all(x["text"] == "" and x["svg"] for x in r), r
+        finally:
+            ctx.close()
