@@ -136,7 +136,7 @@ class TestFooterLogoNachHintergrund:
         assert "brandingLogoUrl()" in BANNER
         m = _bereich(BANNER, "        brandingLogoUrl() {", "        /**\n         * Gemeinsame Gestaltung")
         assert "logo-light-trim.png" in m and "logo-dark-trim.png" in m
-        assert "lesbareSchrift(this.config.bgColor)" in m
+        assert "lesbareSchrift(bg)" in m and "const bg = this.config.bgColor" in m
 
     def test_keine_feste_logodatei_mehr_im_footer(self):
         assert 'src="https://complyo.de/logo-dark-trim.png"' not in BANNER
