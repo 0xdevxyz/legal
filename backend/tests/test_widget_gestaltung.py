@@ -110,6 +110,14 @@ class TestInhaltLadenLaeuftUeberDenBanner:
         assert PLATZHALTER.index("const drittland = this.requiresThirdCountryConsent(src);") > klick
         assert "this.aktualisierePlatzhalterTexte();" in BLOCKER
 
+    def test_datenattribut_scan_ueberschreibt_den_platzhalter_nicht(self):
+        # Der Platzhalter traegt data-complyo-consent. blockDataAttributes() hat ihn
+        # beim zweiten Scan als 'data-attribute' ueberschrieben: kein Freigabe-Handler,
+        # der Inhalt kam nach "Inhalt laden" nie zurueck.
+        scan = _bereich(BLOCKER, "        blockDataAttributes() {", "        blockElement(element) {")
+        assert "this.blockedElements.has(element)" in scan
+        assert "complyo-content-placeholder" in scan
+
     def test_knopf_ist_nie_tot(self):
         # Ohne Banner wird wenigstens diese eine Einbettung geladen.
         assert "this.unblockElement(placeholder, original)" in PLATZHALTER

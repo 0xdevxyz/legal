@@ -642,6 +642,15 @@
                 // ausgeführt (kein Unblock-Handler für 'data-attribute').
                 if (element.tagName === 'SCRIPT') return;
 
+                // Dasselbe gilt fuer Platzhalter und alles, was schon einen eigenen
+                // Eintrag hat (iframe, Bild, ...): Der Platzhalter traegt selbst
+                // data-complyo-consent. Der zweite Scan nach dem Laden des
+                // Dienstkatalogs hat ihn als 'data-attribute' ueberschrieben, der
+                // Freigabe-Handler kannte das nicht, und "Inhalt laden" lud nie
+                // (live gemessen 10.11.2026, YouTube auf loqal-io).
+                if (this.blockedElements.has(element) ||
+                    element.classList.contains('complyo-content-placeholder')) return;
+
                 const category = element.getAttribute('data-complyo-consent');
 
                 if (!this.hasConsent(category)) {
