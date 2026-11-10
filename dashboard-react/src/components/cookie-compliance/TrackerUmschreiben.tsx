@@ -54,12 +54,12 @@ const TrackerUmschreiben: React.FC<Props> = ({ kompakt = false }) => (
     </div>
 
     <div className="bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-xs overflow-x-auto">
-      <pre className="text-green-400 whitespace-pre-wrap">{VORHER_NACHHER}</pre>
+      <pre className="text-green-400 whitespace-pre-wrap break-words">{VORHER_NACHHER}</pre>
     </div>
 
     {!kompakt && (
       <div className="bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg p-3 font-mono text-xs overflow-x-auto">
-        <pre className="text-green-400 whitespace-pre-wrap">{WEITERE}</pre>
+        <pre className="text-green-400 whitespace-pre-wrap break-words">{WEITERE}</pre>
       </div>
     )}
 
