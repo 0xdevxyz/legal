@@ -102,6 +102,14 @@ class TestInhaltLadenLaeuftUeberDenBanner:
         assert "requiresThirdCountryConsent(src)" in PLATZHALTER
         assert "thirdCountry: cur.third_country === true || drittland" in PLATZHALTER
 
+    def test_drittland_wird_beim_klick_bewertet_nicht_beim_erzeugen(self):
+        # Live gemessen 10.11.2026: der Dienstkatalog (und damit die Drittland-Domains)
+        # kommt erst nach dem ersten Scan. Wer das beim Erzeugen festschreibt, setzt
+        # beim Klick kein third_country, und der Inhalt laedt nie: "Ihr Produkt geht nicht".
+        klick = PLATZHALTER.index("placeholder-btn').addEventListener('click'")
+        assert PLATZHALTER.index("const drittland = this.requiresThirdCountryConsent(src);") > klick
+        assert "this.aktualisierePlatzhalterTexte();" in BLOCKER
+
     def test_knopf_ist_nie_tot(self):
         # Ohne Banner wird wenigstens diese eine Einbettung geladen.
         assert "this.unblockElement(placeholder, original)" in PLATZHALTER

@@ -348,6 +348,7 @@
                 if (added > 0) {
                     console.log(`[Complyo Content Blocker] Block list enriched with ${added} service domain(s)`);
                 }
+                this.aktualisierePlatzhalterTexte();
             } catch (e) {
                 // fail-open – keep built-in list
                 console.warn('[Complyo Content Blocker] Could not load service domains:', e);
@@ -926,6 +927,24 @@
             return rueckfall;
         }
 
+        // Text des Platzhalters. Das Drittland steht nur drin, wo der Dienst es
+        // wirklich verlangt (Art. 49 Abs. 1 lit. a DSGVO).
+        placeholderText(dienst, src) {
+            const hinweis = this.requiresThirdCountryConsent(src)
+                ? 'Beim Laden werden Daten an ' + dienst + ' übertragen, auch in Länder außerhalb der EU (z. B. USA). Mit dem Klick willigen Sie darin ein.'
+                : 'Beim Laden werden Daten an ' + dienst + ' übertragen. Mit dem Klick willigen Sie darin ein.';
+            return 'Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich. ' + hinweis;
+        }
+
+        // Nach dem Laden des Dienstkatalogs: Texte bereits sichtbarer Platzhalter
+        // auf den Stand bringen (Drittland-Hinweis).
+        aktualisierePlatzhalterTexte() {
+            document.querySelectorAll('.complyo-content-placeholder[data-complyo-embed-src]').forEach(p => {
+                const t = p.querySelector('.complyo-placeholder-text');
+                if (t) t.textContent = this.placeholderText(p.getAttribute('data-complyo-service') || '', p.getAttribute('data-complyo-embed-src'));
+            });
+        }
+
         createVisualPlaceholder(iframe, service, category) {
             this.injectPlaceholderStyles();
 
@@ -938,23 +957,24 @@
             placeholder.style.width = this.placeholderLaenge(iframe.getAttribute && iframe.getAttribute('width'), '100%');
             placeholder.style.minHeight = this.placeholderLaenge(iframe.getAttribute && iframe.getAttribute('height'), '300px');
 
-            // Drittland: nur dort, wo der Dienst es wirklich verlangt, steht es im
-            // Text und wird mit dem Laden miterteilt (Art. 49 Abs. 1 lit. a DSGVO).
+            // Quelle der Einbettung merken: ob der Dienst ein unsicheres Drittland
+            // beruehrt, weiss der Blocker erst, wenn der Dienstkatalog geladen ist
+            // (loadServiceDomains, kommt nach dem ersten Scan). Text und Freigabe
+            // werden deshalb beim Anzeigen nachgezogen und beim Klick neu bewertet,
+            // nicht beim Erzeugen festgeschrieben.
             const src = (iframe.getAttribute && (iframe.getAttribute('data-complyo-src') || iframe.getAttribute('src'))) || '';
-            const drittland = this.requiresThirdCountryConsent(src);
-            const hinweis = drittland
-                ? 'Beim Laden werden Daten an ' + service.name + ' übertragen, auch in Länder außerhalb der EU (z. B. USA). Mit dem Klick willigen Sie darin ein.'
-                : 'Beim Laden werden Daten an ' + service.name + ' übertragen. Mit dem Klick willigen Sie darin ein.';
+            placeholder.setAttribute('data-complyo-embed-src', src);
 
             placeholder.innerHTML = `
                 <div class="complyo-placeholder-icon" aria-hidden="true">${complyoEsc(service.icon)}</div>
                 <h2 class="complyo-placeholder-title">${complyoEsc(service.name)}</h2>
-                <p class="complyo-placeholder-text">
-                    Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich. ${complyoEsc(hinweis)}
-                </p>
+                <p class="complyo-placeholder-text"></p>
                 <button type="button" class="complyo-placeholder-btn">Inhalt laden</button>
                 <button type="button" class="complyo-placeholder-link">Datenschutzeinstellungen</button>
             `;
+
+            placeholder.querySelector('.complyo-placeholder-text').textContent =
+                this.placeholderText(service.name, src);
 
             const original = {
                 type: 'iframe',
@@ -971,6 +991,7 @@
                 const banner = window.complyoCookieBanner;
                 if (banner && typeof banner.saveCustom === 'function') {
                     const cur = this.consent || {};
+                    const drittland = this.requiresThirdCountryConsent(src);
                     const auswahl = {
                         functional: cur.functional === true,
                         analytics: cur.analytics === true,
