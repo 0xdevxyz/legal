@@ -839,6 +839,17 @@
                 // Sperrbildschirm ueber Video-Hintergrund: weg, das Skript gibt der Head-Blocker frei.
                 if (data.host) data.host.removeAttribute('data-complyo-overlay');
                 element.remove();
+                // Revolution Slider fragt die YouTube-API beim Start einmal ab und gibt nach
+                // wenigen Sekunden auf ("youtube Api Could not be loaded"). Wird die API erst nach
+                // der Einwilligung geladen, bleibt das Hero-Video leer und die Seite sieht kaputt
+                // aus (Rueckmeldung Daniel 10.11.2026). Mit gespeicherter Einwilligung baut sich die
+                // Seite beim naechsten Laden richtig auf: einmal neu laden, kurz verzoegert, damit
+                // der Banner die Einwilligung noch protokollieren kann.
+                if (data.host && data.host.matches && data.host.matches('rs-module-wrap, .rev_slider_wrapper') &&
+                        !this._neuLadenGeplant) {
+                    this._neuLadenGeplant = true;
+                    setTimeout(() => { location.reload(); }, 1500);
+                }
             } else if (type === 'script') {
                 this.unblockScript(element, data);
             } else if (type === 'iframe') {

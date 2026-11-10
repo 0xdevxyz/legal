@@ -295,7 +295,9 @@ class TestSperrbildschirmeImBannerDesign:
             _warte_banner(page)
             # Der Banner liegt ueber der Seite; der Besucher koennte den Knopf nach dem Banner klicken.
             page.evaluate("() => document.querySelector('#rev_slider_4_1_wrapper .complyo-placeholder-btn').click()")
-            page.wait_for_timeout(1200)
+            # Revolution Slider: nach der Freigabe laedt die Seite einmal neu (1,5 s), damit sich das
+            # Hero-Video mit bereits gespeicherter Einwilligung richtig aufbaut.
+            page.wait_for_timeout(4000)
             c = page.evaluate("() => JSON.parse(localStorage.getItem('complyo_cookie_consent'))")
             assert c["marketing"] is True and c["analytics"] is False, c
             assert page.evaluate("() => window.__yt_api || 0") == 1
