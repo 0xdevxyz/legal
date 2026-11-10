@@ -678,7 +678,8 @@
                 overlay.style.bottom = '0';
                 overlay.style.width = 'auto';
                 overlay.style.minHeight = '0';
-                overlay.style.zIndex = '60';
+                // ueber Lade-Kreisel und Ebenen der Slider, unter dem Banner
+                overlay.style.zIndex = '9990';
                 overlay.style.borderRadius = '0';
                 host.appendChild(overlay);
 
@@ -1043,6 +1044,14 @@
                     text-decoration: underline;
                     cursor: pointer;
                 }
+                /* Themes setzen Buchstabenabstand/Grossschreibung auf button; der Platzhalter
+                   sieht auf jeder Seite wie der Banner aus (gemessen 10.11.2026, reinhardt.coffee). */
+                .complyo-placeholder-btn,
+                .complyo-placeholder-link {
+                    text-transform: none;
+                    text-shadow: none;
+                }
+                .complyo-placeholder-link { letter-spacing: normal; }
                 .complyo-placeholder-btn:focus-visible,
                 .complyo-placeholder-link:focus-visible {
                     outline: 3px solid var(--complyo-link, #1f2937);
