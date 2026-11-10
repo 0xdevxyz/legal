@@ -678,8 +678,8 @@
                 overlay.style.bottom = '0';
                 overlay.style.width = 'auto';
                 overlay.style.minHeight = '0';
-                // ueber Lade-Kreisel und Ebenen der Slider, unter dem Banner
-                overlay.style.zIndex = '9990';
+                // ueber dem Lade-Kreisel des Revolution Sliders (z-index 10000), unter dem Banner
+                overlay.style.zIndex = '10050';
                 overlay.style.borderRadius = '0';
                 host.appendChild(overlay);
 
