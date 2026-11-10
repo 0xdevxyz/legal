@@ -547,6 +547,13 @@ async def apply_scan_to_banner(
 
     # Ziel-Site bestimmen (explizit übergeben oder primäre Website des Nutzers)
     site_id = body.site_id
+    if site_id:
+        # Angemeldet allein reicht nicht: die Kennung steht im Einbaucode jeder
+        # Kundenseite. Ohne diese Pruefung schrieb jedes Konto die Dienstliste
+        # einer fremden Website (Befund 10.11.2026, wie beim Cookie-Scan).
+        from cookie_compliance_routes import get_user_site_ids
+        if site_id not in await get_user_site_ids(int(user_id)):
+            raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
     if not site_id:
         from cookie_compliance_routes import get_user_website_site_id
         site_id = await get_user_website_site_id(int(user_id))

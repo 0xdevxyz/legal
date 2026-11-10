@@ -272,6 +272,40 @@ async def get_user_site_ids(user_id: Any) -> set:
     return site_ids
 
 
+async def scan_schreibziel(user_id: Any, kandidat: Optional[str], pool) -> Optional[str]:
+    """Wohin der Cookie-Scan seine Dienstliste schreiben darf. None = nirgends.
+
+    Befund 10.11.2026: `POST /api/cookie-compliance/scan` schrieb `services`
+    fuer jede uebergebene site_id, auch ohne Anmeldung. Die Kennung steht im
+    Einbaucode jeder Kundenseite; ein Fremder konnte damit die Dienstliste
+    eines Kundenbanners leeren oder ersetzen. Gemessen wird weiter fuer jeden,
+    gespeichert nur noch hier entlang:
+
+    - ohne Anmeldung: nie.
+    - gehoert die angefragte Website dem Konto (get_user_site_ids): dorthin.
+      Agenturkonten treffen damit die gewaehlte Website und nicht mehr die
+      primaere.
+    - sonst die primaere Website des Kontos (abweichende Schreibweise, www,
+      Unterseite; bisheriges Verhalten fuer Einzelkonten).
+    - Konto ganz ohne Website: nur neu anlegen, nie eine vorhandene Zeile
+      anfassen (sie gehoert jemand anderem oder ist verwaist).
+    """
+    if user_id is None or not kandidat:
+        return None
+    eigene = await get_user_site_ids(user_id)
+    if kandidat in eigene:
+        return kandidat
+    primaer = await get_user_website_site_id(user_id)
+    if primaer:
+        return primaer
+    if eigene:
+        return None
+    vorhanden = await pool.fetchrow(
+        "SELECT id FROM cookie_banner_configs WHERE site_id = $1", kandidat
+    )
+    return None if vorhanden else kandidat
+
+
 async def require_site_access(
     site_id: str,
     credentials: HTTPAuthorizationCredentials,
@@ -2195,19 +2229,31 @@ async def scan_website(
         #    MUSS dem User zugeordnet werden (user_id), sonst findet /my-config sie
         #    nicht (filtert auf user_id) und die Ersteinrichtung läuft in eine Schleife.
         user_id = None
+        # Gespeichert wird nur am eigenen Ziel (scan_schreibziel). Ohne Anmeldung
+        # oder an einer fremden Website bleibt es bei der Messung; jeder Fehler
+        # beim Ermitteln heisst ebenfalls: nicht speichern.
+        schreibziel = None
         try:
             user = await get_current_user_optional(credentials)
             if user:
                 user_id = await get_user_id_from_token(user)
-                # An die registrierte Website binden (1 Account = 1 Website),
-                # damit nicht unter einer abweichenden site_id eine Waisen-Config entsteht.
-                registered_site_id = await get_user_website_site_id(user_id)
-                if registered_site_id:
-                    site_id = registered_site_id
+                schreibziel = await scan_schreibziel(user_id, site_id, db_pool)
+                if schreibziel:
+                    site_id = schreibziel
         except Exception as e:
+            schreibziel = None
             logger.warning(f"[Scan] Could not resolve user_id (anonymous scan): {e}")
 
-        logger.warning(f"[Scan] START url={url} site_id={site_id} user_id={user_id}")
+        if user_id is None:
+            speicherung = "ohne_anmeldung"
+        elif schreibziel is None:
+            speicherung = "fremde_website"
+        else:
+            speicherung = "gespeichert"
+
+        logger.warning(
+            f"[Scan] START url={url} site_id={site_id} user_id={user_id} speicherung={speicherung}"
+        )
 
         # Scan website
         scan_result = await cookie_scanner.scan_website(url)
@@ -2281,7 +2327,7 @@ async def scan_website(
 
         # ✅ AUTOMATISCH: Speichere gefundene Services in cookie_banner_configs
         config_updated = False
-        if site_id:
+        if schreibziel:
             # Prüfe ob Config existiert
             existing = await db_pool.fetchrow(
                 "SELECT id FROM cookie_banner_configs WHERE site_id = $1",
@@ -2324,7 +2370,9 @@ async def scan_website(
                 config_updated = True
                 logger.warning(f"[Scan] ✅ INSERT site_id={site_id} result={res} services={len(service_keys_found)}")
         else:
-            logger.warning(f"[Scan] ⚠️ persistence SKIPPED — empty site_id (url={url}, user_id={user_id})")
+            logger.warning(
+                f"[Scan] nicht gespeichert ({speicherung}): url={url} site_id={site_id} user_id={user_id}"
+            )
 
         # Drittlandtransfer-Findings (abmahnfähig, KEIN Cookie-Problem) durchreichen.
         # Diese erscheinen unabhängig davon, ob Banner-Cookies gefunden wurden —
@@ -2375,6 +2423,8 @@ async def scan_website(
             "farben_gespeichert": farben_gespeichert,
             "privacy_findings_count": len(privacy_findings),
             "config_updated": config_updated,
+            # gespeichert | ohne_anmeldung | fremde_website (siehe scan_schreibziel)
+            "speicherung": speicherung,
             "scan_timestamp": scan_result.get('scan_timestamp'),
             "raw_detection": {
                 'scripts_count': len(scan_result.get('scripts', [])),
