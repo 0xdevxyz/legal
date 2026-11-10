@@ -751,9 +751,27 @@
                                         cookies = [];
                                     }
                                 }
+                                // Die Katalogspalten cookies/description sind oft leer, die Angaben
+                                // stehen dann im Template (Cookie-Namen, Dauer, Zweck, Rechtsgrundlage).
+                                let tpl = service.template;
+                                if (typeof tpl === 'string') {
+                                    try { tpl = JSON.parse(tpl); } catch (e) { tpl = null; }
+                                }
+                                tpl = tpl || {};
+                                if ((!cookies || cookies.length === 0) && Array.isArray(tpl.cookies)) {
+                                    cookies = tpl.cookies;
+                                }
+                                const laender = Array.isArray(service.data_processing_countries) && service.data_processing_countries.length
+                                    ? service.data_processing_countries.map(c => (c && c.name) || c)
+                                    : (Array.isArray(tpl.data_processing_countries) ? tpl.data_processing_countries : []);
                                 this.serviceDetails[service.category].push({
                                     ...service,
-                                    cookies: cookies
+                                    cookies: cookies,
+                                    description: service.description || tpl.description_de || '',
+                                    cookie_lifetime: tpl.cookie_lifetime || '',
+                                    legal_basis: tpl.legal_basis || '',
+                                    privacy_url: service.privacy_url || tpl.privacy_policy_url || '',
+                                    processing_countries: laender
                                 });
                             });
                         console.log('[Complyo] Gescannte Services geladen:', this.serviceDetails);
@@ -2579,6 +2597,8 @@
             }
             
             this.saveConsent(consent);
+            // Auch das Einstellungsfenster schliessen, falls "Alle akzeptieren" dort gedrueckt wurde
+            this.closeSettings();
             this.hideBanner();
         }
         
@@ -2599,6 +2619,7 @@
             }
             
             this.saveConsent(consent);
+            this.closeSettings();
             this.hideBanner();
         }
         
@@ -3397,6 +3418,35 @@
                                         <div class="cps-details-row">
                                             <span class="cps-details-label">Cookies</span>
                                             <span class="cps-details-value">${sanitizeText(service.cookies.map(c => typeof c === 'string' ? c : c.name).join(', '))}</span>
+                                        </div>
+                                    ` : (/^keine cookies/i.test(service.cookie_lifetime || '') ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Cookies</span>
+                                            <span class="cps-details-value">Es werden keine Cookies gesetzt.</span>
+                                        </div>
+                                    ` : '')}
+                                    ${service.cookie_lifetime && !/^keine cookies/i.test(service.cookie_lifetime) ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Speicherdauer</span>
+                                            <span class="cps-details-value">${sanitizeText(service.cookie_lifetime)}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${service.legal_basis ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Rechtsgrundlage</span>
+                                            <span class="cps-details-value">${sanitizeText(service.legal_basis)}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${service.processing_countries && service.processing_countries.length > 0 ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Verarbeitung in</span>
+                                            <span class="cps-details-value">${sanitizeText(service.processing_countries.join(', '))}</span>
+                                        </div>
+                                    ` : ''}
+                                    ${/^https:\/\//i.test(service.privacy_url || '') ? `
+                                        <div class="cps-details-row">
+                                            <span class="cps-details-label">Datenschutz</span>
+                                            <span class="cps-details-value"><a href="${sanitizeText(service.privacy_url)}" target="_blank" rel="noopener noreferrer">Datenschutzerklärung des Anbieters</a></span>
                                         </div>
                                     ` : ''}
                                 </div>

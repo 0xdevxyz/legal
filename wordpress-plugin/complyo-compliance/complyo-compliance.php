@@ -3,7 +3,7 @@
  * Plugin Name: Complyo Compliance
  * Plugin URI: https://complyo.de
  * Description: DSGVO-konformes Cookie-Banner und Accessibility-Widget. Konfiguration über app.complyo.de.
- * Version: 2.6.0
+ * Version: 2.7.0
  * Author: Complyo
  * Author URI: https://complyo.de
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMPLYO_VERSION',        '2.6.0');
+define('COMPLYO_VERSION',        '2.7.0');
 define('COMPLYO_API_BASE',       'https://api.complyo.de');
 define('COMPLYO_APP_URL',        'https://app.complyo.de');
 define('COMPLYO_PLUGIN_DIR',     plugin_dir_path(__FILE__));

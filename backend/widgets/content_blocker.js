@@ -126,7 +126,16 @@
     // befüllt (requires_third_country_consent === true). Solche Services werden
     // NUR freigeschaltet, wenn zusätzlich zur Kategorie die gesonderte
     // Drittland-Einwilligung vorliegt.
-    const THIRD_COUNTRY_DOMAINS = [];
+    // Vorbelegt mit den grossen US-Anbietern, damit "Inhalt laden" die gesonderte Einwilligung auch
+    // dann miterteilt, wenn der Katalog noch nicht geladen ist oder gar nicht erreichbar war
+    // (ohne sie bliebe der Dienst nach dem Klick weiter gesperrt: Blocker verlangt sie). Gleiche
+    // Liste wie US_HOSTS in public/cookie-blocker.js.
+    const THIRD_COUNTRY_DOMAINS = [
+        'google.com', 'googleapis.com', 'gstatic.com', 'googletagmanager.com', 'google-analytics.com',
+        'googleadservices.com', 'doubleclick.net', 'youtube.com', 'youtube-nocookie.com', 'ytimg.com',
+        'facebook.com', 'facebook.net', 'instagram.com', 'twitter.com', 'linkedin.com', 'licdn.com',
+        'tiktok.com', 'vimeo.com'
+    ];
 
     // Service-specific patterns for visual placeholders
     const VIDEO_SERVICES = {
@@ -208,7 +217,7 @@
             // Consent früh laden, um unnötiges Block→Unblock zu vermeiden.
             this.consent = this.loadConsentFromStorage();
 
-            if (!this.consent) {
+            if (this.brauchtBlockierung()) {
                 // SOFORT (noch vor DOMContentLoaded) Hooks setzen, beobachten und
                 // eine erste Runde blockieren – damit früh im <head> stehende und
                 // dynamisch injizierte Ressourcen erfasst werden, statt erst nach
@@ -218,6 +227,11 @@
                 this.blockAllContent();
             }
 
+            // Slider bauen ihre Video-Ebenen oft erst nach dem Laden: Sperrbildschirm nachziehen.
+            window.addEventListener('load', () => {
+                if (this.brauchtBlockierung()) this.blockVideoBackgrounds();
+            });
+
             // Listen for DOM loaded
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', () => this.onDOMReady());
@@ -226,11 +240,28 @@
             }
         }
 
+        /**
+         * Muss noch etwas blockiert werden? Ja, solange nicht ALLE Kategorien
+         * eingewilligt sind. Wer nur "funktional" erlaubt hat, bekommt fuer YouTube
+         * weiterhin den Platzhalter, nicht den ungebremsten Rahmen.
+         */
+        brauchtBlockierung() {
+            const c = this.consent;
+            if (!c) return true;
+            return !(c.functional && c.analytics && c.marketing && c.third_country);
+        }
+
         async onDOMReady() {
-            if (this.consent) {
+            if (this.consent && !this.brauchtBlockierung()) {
                 // Consent already given - unblock immediately
                 console.log('[Complyo Content Blocker] Consent found, unblocking...');
                 this.unblockContent();
+            } else if (this.consent) {
+                // Teil-Einwilligung: freigeben, was erlaubt ist, den Rest weiter blockieren.
+                this.blockAllContent();
+                this.unblockContent();
+                await this.loadServiceDomains();
+                this.blockAllContent();
             } else {
                 // Vollständig geparstes DOM erneut scannen …
                 this.blockAllContent();
@@ -436,6 +467,9 @@
 
             // Block iframes
             this.blockIframes();
+
+            // Video-Hintergruende von Slidern/Page-Buildern (kein iframe im Markup)
+            this.blockVideoBackgrounds();
             
             // Block images (tracking pixels)
             this.blockImages();
@@ -523,7 +557,7 @@
         }
 
         blockIframes() {
-            const iframes = document.querySelectorAll('iframe[src]');
+            const iframes = document.querySelectorAll('iframe[src], iframe[data-complyo-src][data-complyo-blocked="true"]');
             
             iframes.forEach(iframe => {
                 // Skip if already processed
@@ -531,7 +565,11 @@
                     return;
                 }
                 
-                const src = iframe.src;
+                // Vom Head-Blocker oder dem WordPress-Plugin vorab neutralisiert: das Ziel steht
+                // in data-complyo-src, damit der Browser es nie abgerufen hat.
+                const src = iframe.getAttribute('src')
+                    ? iframe.src
+                    : (iframe.getAttribute('data-complyo-src') || '');
                 const category = this.getCategoryForURL(src);
                 
                 if (category && !this.hasConsent(category)) {
@@ -595,6 +633,66 @@
             });
         }
         
+        /**
+         * Video-Hintergruende (Revolution Slider <rs-bgvideo data-ytid>, WPBakery
+         * data-vc-parallax-image/data-vc-video-bg mit YouTube- oder Vimeo-Adresse): das Markup
+         * enthaelt keinen iframe, der Rahmen entsteht erst durch das YouTube-/Vimeo-Skript,
+         * das der Blocker bis zur Einwilligung zurueckhaelt. Ohne Hinweis blieben Hero und
+         * Videoband leer. Hier bekommt der Bereich denselben Sperrbildschirm wie ein
+         * gesperrter Rahmen (Banner-Gestaltung), gelegt ueber den Bereich.
+         */
+        blockVideoBackgrounds() {
+            const sel = '[data-ytid], [data-vimeoid], [data-vc-video-bg], ' +
+                '[data-vc-parallax-image*="youtube.com"], [data-vc-parallax-image*="youtu.be"], ' +
+                '[data-vc-parallax-image*="vimeo.com"]';
+            document.querySelectorAll(sel).forEach(el => {
+                let url = '';
+                if (el.hasAttribute('data-ytid')) url = 'https://www.youtube.com/watch?v=' + el.getAttribute('data-ytid');
+                else if (el.hasAttribute('data-vimeoid')) url = 'https://vimeo.com/' + el.getAttribute('data-vimeoid');
+                else url = el.getAttribute('data-vc-video-bg') || el.getAttribute('data-vc-parallax-image') || '';
+                if (!/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com|vimeo\.com)\//i.test(url)) return;
+
+                const category = this.getCategoryForURL(url) || 'marketing';
+                if (this.hasConsent(category) && this.thirdCountryAllowed(url)) return;
+
+                // Bereich, den der Besucher als "das Video" sieht
+                const host = el.closest('rs-module-wrap, .rev_slider_wrapper, .rev_slider') || el;
+                if (host.hasAttribute('data-complyo-overlay')) return;
+                host.setAttribute('data-complyo-overlay', 'true');
+                if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+
+                const service = /vimeo/i.test(url) ? VIDEO_SERVICES.vimeo : VIDEO_SERVICES.youtube;
+                const fake = {
+                    complyoOverlay: true,
+                    style: {},
+                    removeAttribute: function() {},
+                    getAttribute: function(n) { return n === 'data-complyo-src' ? url : null; }
+                };
+                const overlay = this.createVisualPlaceholder(fake, service, category);
+                overlay.classList.add('complyo-video-overlay');
+                overlay.setAttribute('data-complyo-overlay-for', url);
+                overlay.style.position = 'absolute';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.right = '0';
+                overlay.style.bottom = '0';
+                overlay.style.width = 'auto';
+                overlay.style.minHeight = '0';
+                overlay.style.zIndex = '60';
+                overlay.style.borderRadius = '0';
+                host.appendChild(overlay);
+
+                this.blockedElements.set(overlay, {
+                    type: 'overlay',
+                    category: category,
+                    originalSrc: url,
+                    service: service,
+                    host: host
+                });
+                console.log(`[Complyo] Blocked video background: ${url} (${category})`);
+            });
+        }
+
         blockImages() {
             const images = document.querySelectorAll('img[src]');
             
@@ -650,6 +748,8 @@
                 // (live gemessen 10.11.2026, YouTube auf loqal-io).
                 if (this.blockedElements.has(element) ||
                     element.classList.contains('complyo-content-placeholder')) return;
+                // Zusaetzlich: vorab neutralisierte Ziele (iframe/link) gehoeren ihren eigenen Handlern.
+                if (element.hasAttribute('data-complyo-src') || element.hasAttribute('data-complyo-href')) return;
 
                 const category = element.getAttribute('data-complyo-consent');
 
@@ -701,8 +801,8 @@
             
             console.log('[Complyo] Unblocking content based on consent:', this.consent);
             
-            // Stop observing (no need to block new elements)
-            if (this.observer) {
+            // Stop observing (no need to block new elements) - nur bei voller Einwilligung
+            if (this.observer && !this.brauchtBlockierung()) {
                 this.observer.disconnect();
             }
             
@@ -734,7 +834,11 @@
             
             console.log(`[Complyo] Unblocking ${type} (${category})`);
             
-            if (type === 'script') {
+            if (type === 'overlay') {
+                // Sperrbildschirm ueber Video-Hintergrund: weg, das Skript gibt der Head-Blocker frei.
+                if (data.host) data.host.removeAttribute('data-complyo-overlay');
+                element.remove();
+            } else if (type === 'script') {
                 this.unblockScript(element, data);
             } else if (type === 'iframe') {
                 this.unblockIframe(element, data);
@@ -775,6 +879,14 @@
             if (data.service) {
                 // Replace visual placeholder with actual iframe
                 const iframe = data.original;
+                const neutral = iframe.getAttribute('data-complyo-src');
+                if (!iframe.getAttribute('src') && neutral) {
+                    iframe.removeAttribute('data-complyo-blocked');
+                    iframe.removeAttribute('data-complyo-src');
+                    iframe.removeAttribute('data-complyo-consent');
+                    iframe.style.display = '';
+                    iframe.src = neutral;
+                }
                 element.parentNode.replaceChild(iframe, element);
                 
                 // Auto-play videos
@@ -998,7 +1110,7 @@
                 this.placeholderText(service.name, src);
 
             const original = {
-                type: 'iframe',
+                type: iframe.complyoOverlay ? 'overlay' : 'iframe',
                 category: category,
                 original: iframe,
                 service: service

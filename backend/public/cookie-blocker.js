@@ -616,7 +616,8 @@
 
             // Serverseitig neutralisierte Elemente einsammeln (nicht ueber den Haken entstanden).
             document.querySelectorAll(
-                'script[type="text/plain"][data-complyo-consent], iframe[data-complyo-src][data-complyo-blocked="true"]'
+                'script[type="text/plain"][data-complyo-consent], iframe[data-complyo-src][data-complyo-blocked="true"], ' +
+                'link[data-complyo-href][data-complyo-blocked="true"]'
             ).forEach(el => {
                 if (this.state.blockedElements.indexOf(el) === -1) this.state.blockedElements.push(el);
             });

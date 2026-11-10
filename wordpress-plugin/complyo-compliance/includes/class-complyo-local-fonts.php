@@ -77,13 +77,23 @@ class Complyo_Local_Fonts {
         if (!$url) {
             return false;
         }
-        $host = wp_parse_url($url, PHP_URL_HOST);
+        $host = wp_parse_url($this->norm($url), PHP_URL_HOST);
         return $host === 'fonts.googleapis.com';
+    }
+
+    /** Protokollrelative Adressen (//fonts.googleapis.com/…) wie https behandeln, Entitäten auflösen. */
+    private function norm($url) {
+        $url = html_entity_decode((string) $url);
+        if (strpos($url, '//') === 0) {
+            $url = 'https:' . $url;
+        }
+        return $url;
     }
 
     /** Liefert die lokale CSS-URL für eine googleapis-URL, falls bereits lokalisiert. */
     private function local_css_for($url) {
         $map = get_option(self::OPTION_MAP, array());
+        $url = $this->norm($url);
         return isset($map[$url]) ? $map[$url] : null;
     }
 
@@ -115,9 +125,9 @@ class Complyo_Local_Fonts {
 
         // 1) <link rel="stylesheet" href="https://fonts.googleapis.com/…">
         $html = preg_replace_callback(
-            '#<link\b[^>]*href=(["\'])(https?://fonts\.googleapis\.com/[^"\']+)\1[^>]*>#i',
+            '#<link\b[^>]*href=(["\'])((?:https?:)?//fonts\.googleapis\.com/[^"\']+)\1[^>]*>#i',
             function ($m) use ($map, &$newly) {
-                $url = html_entity_decode($m[2]);
+                $url = $this->norm($m[2]);
                 if (isset($map[$url])) {
                     // href auf lokale Kopie umbiegen, media-Reste belassen
                     return str_replace($m[2], esc_url($map[$url]), $m[0]);
@@ -196,6 +206,7 @@ class Complyo_Local_Fonts {
     // =========================================================================
 
     private function queue_urls($urls) {
+        $urls    = array_map(array($this, 'norm'), (array) $urls);
         $pending = get_option(self::OPTION_PENDING, array());
         $changed = false;
         foreach ($urls as $url) {
