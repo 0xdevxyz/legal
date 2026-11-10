@@ -822,94 +822,180 @@
         // Visual Placeholders
         // ====================================================================
         
+        /**
+         * Gestaltung der Platzhalter: nie eigene Werte, immer die des Banners.
+         *
+         * Farben, Schrift und Rundungen kommen aus den Variablen, die der Banner
+         * auf :root setzt (cookie_banner_v2.js, applyDesignTokens). Die Rueckfall-
+         * werte hinter jeder Variable entsprechen den Banner-Vorgaben und greifen
+         * nur, solange die Konfiguration noch nicht geladen ist oder der Banner
+         * fehlt. Der Platzhalter ist die Karte des Banners: Flaeche, Titel,
+         * Beschreibung und Knoepfe in derselben Form (.complyo-btn-primary und
+         * .complyo-btn-link des Banners).
+         */
+        injectPlaceholderStyles() {
+            if (document.getElementById('complyo-placeholder-styles')) return;
+            const style = document.createElement('style');
+            style.id = 'complyo-placeholder-styles';
+            style.textContent = `
+                .complyo-content-placeholder {
+                    position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                    max-width: 100%;
+                    padding: 28px 24px;
+                    background: var(--complyo-bg, #ffffff);
+                    color: var(--complyo-text, #333333);
+                    border: 1px solid rgba(0, 0, 0, 0.1);
+                    border-radius: var(--complyo-radius-card, 12px);
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+                    font-family: var(--complyo-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+                    font-size: 14px;
+                    line-height: 1.5;
+                    text-align: center;
+                    overflow: hidden;
+                }
+                .complyo-content-placeholder * { box-sizing: border-box; }
+                .complyo-placeholder-icon {
+                    font-size: 36px;
+                    line-height: 1;
+                    margin: 0 0 12px;
+                }
+                .complyo-placeholder-title {
+                    margin: 0 0 10px;
+                    font-size: 21px;
+                    font-weight: 700;
+                    line-height: 1.25;
+                    letter-spacing: -0.02em;
+                    color: var(--complyo-text, #333333);
+                }
+                .complyo-placeholder-text {
+                    margin: 0 0 18px;
+                    max-width: 440px;
+                    color: var(--complyo-muted, #595959);
+                }
+                .complyo-placeholder-btn {
+                    width: 100%;
+                    max-width: 320px;
+                    padding: 13px 26px;
+                    border: none;
+                    border-radius: var(--complyo-radius-btn, 10px);
+                    background: var(--complyo-primary, #7c3aed);
+                    color: var(--complyo-on-primary, #ffffff);
+                    font: inherit;
+                    font-size: 15px;
+                    font-weight: 600;
+                    letter-spacing: -0.01em;
+                    cursor: pointer;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .complyo-placeholder-btn:hover {
+                    background: var(--complyo-accent, #9333ea);
+                    color: var(--complyo-on-accent, #ffffff);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+                }
+                .complyo-placeholder-link {
+                    margin-top: 10px;
+                    padding: 6px 10px;
+                    border: none;
+                    background: none;
+                    font: inherit;
+                    font-size: 14px;
+                    color: var(--complyo-link, #6d28d9);
+                    text-decoration: underline;
+                    cursor: pointer;
+                }
+                .complyo-placeholder-btn:focus-visible,
+                .complyo-placeholder-link:focus-visible {
+                    outline: 3px solid var(--complyo-link, #6d28d9);
+                    outline-offset: 2px;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(style);
+        }
+
+        // Breite/Hoehe eines iframe-Attributs als CSS-Laenge ("560" -> "560px").
+        placeholderLaenge(wert, rueckfall) {
+            const v = String(wert || '').trim();
+            if (/^\d+(\.\d+)?$/.test(v)) return v + 'px';
+            if (/^\d+(\.\d+)?(px|%|em|rem|vw|vh)$/.test(v)) return v;
+            return rueckfall;
+        }
+
         createVisualPlaceholder(iframe, service, category) {
+            this.injectPlaceholderStyles();
+
             const placeholder = document.createElement('div');
             placeholder.className = 'complyo-content-placeholder';
             placeholder.setAttribute('data-complyo-consent', category);
             placeholder.setAttribute('data-complyo-service', service.name);
-            placeholder.style.cssText = `
-                position: relative;
-                width: ${iframe.width || '100%'};
-                height: ${iframe.height || '400px'};
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                flex-direction: column;
-                color: white;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                border-radius: 8px;
-                overflow: hidden;
-                cursor: pointer;
-                transition: transform 0.2s;
-            `;
-            
+            placeholder.setAttribute('role', 'group');
+            placeholder.setAttribute('aria-label', service.name);
+            placeholder.style.width = this.placeholderLaenge(iframe.getAttribute && iframe.getAttribute('width'), '100%');
+            placeholder.style.minHeight = this.placeholderLaenge(iframe.getAttribute && iframe.getAttribute('height'), '300px');
+
+            // Drittland: nur dort, wo der Dienst es wirklich verlangt, steht es im
+            // Text und wird mit dem Laden miterteilt (Art. 49 Abs. 1 lit. a DSGVO).
+            const src = (iframe.getAttribute && (iframe.getAttribute('data-complyo-src') || iframe.getAttribute('src'))) || '';
+            const drittland = this.requiresThirdCountryConsent(src);
+            const hinweis = drittland
+                ? 'Beim Laden werden Daten an ' + service.name + ' übertragen, auch in Länder außerhalb der EU (z. B. USA). Mit dem Klick willigen Sie darin ein.'
+                : 'Beim Laden werden Daten an ' + service.name + ' übertragen. Mit dem Klick willigen Sie darin ein.';
+
             placeholder.innerHTML = `
-                <style>
-                    .complyo-content-placeholder:hover {
-                        transform: scale(1.02);
-                    }
-                    .complyo-placeholder-icon {
-                        font-size: 48px;
-                        margin-bottom: 16px;
-                        opacity: 0.9;
-                    }
-                    .complyo-placeholder-title {
-                        font-size: 20px;
-                        font-weight: 600;
-                        margin-bottom: 8px;
-                    }
-                    .complyo-placeholder-text {
-                        font-size: 14px;
-                        opacity: 0.9;
-                        text-align: center;
-                        padding: 0 20px;
-                        max-width: 400px;
-                    }
-                    .complyo-placeholder-btn {
-                        margin-top: 20px;
-                        padding: 12px 24px;
-                        background: white;
-                        color: #667eea;
-                        border: none;
-                        border-radius: 6px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: all 0.2s;
-                    }
-                    .complyo-placeholder-btn:hover {
-                        transform: translateY(-2px);
-                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-                    }
-                </style>
-                <div class="complyo-placeholder-icon">${complyoEsc(service.icon)}</div>
-                <div class="complyo-placeholder-title">${complyoEsc(service.generic ? service.name : service.name + ' Video')}</div>
-                <div class="complyo-placeholder-text">
-                    Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich.
-                </div>
-                <button class="complyo-placeholder-btn">
-                    Inhalt laden
-                </button>
+                <div class="complyo-placeholder-icon" aria-hidden="true">${complyoEsc(service.icon)}</div>
+                <h2 class="complyo-placeholder-title">${complyoEsc(service.name)}</h2>
+                <p class="complyo-placeholder-text">
+                    Zum Laden dieses Inhalts ist Ihre Zustimmung erforderlich. ${complyoEsc(hinweis)}
+                </p>
+                <button type="button" class="complyo-placeholder-btn">Inhalt laden</button>
+                <button type="button" class="complyo-placeholder-link">Datenschutzeinstellungen</button>
             `;
-            
-            // Click handler to load content
-            placeholder.addEventListener('click', () => {
-                // If no consent yet, show banner
-                if (!this.hasConsent(category)) {
-                    if (window.complyoCookieBanner) {
-                        window.complyoCookieBanner.showBanner();
-                    }
+
+            const original = {
+                type: 'iframe',
+                category: category,
+                original: iframe,
+                service: service
+            };
+
+            // "Inhalt laden" gibt genau diesen Dienst frei (seine Kategorie und,
+            // wo noetig, das Drittland) und laesst alles andere, wie es war.
+            // Das laeuft ueber den Banner, damit die Einwilligung protokolliert
+            // und fuer die uebrigen Seiten gemerkt wird.
+            placeholder.querySelector('.complyo-placeholder-btn').addEventListener('click', () => {
+                const banner = window.complyoCookieBanner;
+                if (banner && typeof banner.saveCustom === 'function') {
+                    const cur = this.consent || {};
+                    const auswahl = {
+                        functional: cur.functional === true,
+                        analytics: cur.analytics === true,
+                        marketing: cur.marketing === true,
+                        thirdCountry: cur.third_country === true || drittland,
+                        services: Array.isArray(cur.services) ? cur.services.slice() : []
+                    };
+                    auswahl[category] = true;
+                    banner.saveCustom(auswahl);
                 } else {
-                    // Consent given, load immediately
-                    this.unblockElement(placeholder, {
-                        type: 'iframe',
-                        category: category,
-                        original: iframe,
-                        service: service
-                    });
+                    // Ohne Banner gibt es nichts zu protokollieren: der Klick gilt
+                    // nur fuer diese eine Einbettung.
+                    this.unblockElement(placeholder, original);
                 }
             });
-            
+
+            placeholder.querySelector('.complyo-placeholder-link').addEventListener('click', () => {
+                const banner = window.complyoCookieBanner;
+                if (banner && typeof banner.openSettings === 'function') {
+                    banner.openSettings();
+                } else if (banner && typeof banner.showBanner === 'function') {
+                    banner.showBanner();
+                }
+            });
+
             return placeholder;
         }
         

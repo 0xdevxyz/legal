@@ -292,6 +292,9 @@
                 // hat den Einbettungscode auf eine Seite kopiert, für die keine
                 // Lizenz besteht — das soll nicht beiläufig wirken.
                 if (severe) {
+                    // Gleiche Gestaltung wie der Banner: weisse Karte, Banner-Schrift,
+                    // Banner-Rundung (Variablen aus applyDesignTokens). Keine eigenen
+                    // Farben, damit der Hinweis nicht wie ein Fremdkoerper wirkt.
                     const overlay = document.createElement('div');
                     overlay.id = 'complyo-license-notice';
                     overlay.setAttribute('role', 'alertdialog');
@@ -299,35 +302,37 @@
                     overlay.setAttribute('aria-label', 'Lizenzhinweis');
                     overlay.style.cssText = [
                         'position:fixed', 'inset:0', 'z-index:2147483647',
-                        'background:rgba(9,9,11,.94)', 'color:#f9fafb',
+                        'background:rgba(0,0,0,.5)',
                         'display:flex', 'align-items:center', 'justify-content:center',
-                        'padding:24px',
-                        'font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif'
+                        'padding:24px', 'box-sizing:border-box',
+                        'font-family:var(--complyo-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif)'
                     ].join(';');
 
                     const box = document.createElement('div');
                     box.style.cssText = [
-                        'max-width:620px', 'text-align:center',
-                        'border:1px solid rgba(255,255,255,.14)', 'border-radius:16px',
-                        'background:#18181b', 'padding:32px 28px',
-                        'box-shadow:0 24px 60px rgba(0,0,0,.5)'
+                        'max-width:560px', 'width:100%', 'box-sizing:border-box',
+                        'background:var(--complyo-bg,#fff)', 'color:var(--complyo-text,#333)',
+                        'border-radius:var(--complyo-radius-card,12px)',
+                        'padding:28px 32px',
+                        'box-shadow:0 24px 72px rgba(0,0,0,.15),0 8px 16px rgba(0,0,0,.1)',
+                        'font-size:14px', 'line-height:1.5'
                     ].join(';');
 
-                    const heading = document.createElement('p');
+                    const heading = document.createElement('h2');
                     heading.textContent = 'Nicht lizenzierte Nutzung';
                     heading.style.cssText =
-                        'margin:0 0 12px;font-size:13px;font-weight:700;' +
-                        'letter-spacing:.08em;text-transform:uppercase;color:#00FFF7';
+                        'margin:0 0 14px;font-size:21px;font-weight:700;line-height:1.25;' +
+                        'letter-spacing:-.02em;text-align:center;color:var(--complyo-text,#333)';
 
                     const body = document.createElement('p');
                     body.textContent = text;
-                    body.style.cssText = 'margin:0 0 20px;font-size:17px';
+                    body.style.cssText = 'margin:0 0 12px;font-size:14px';
 
                     const hint = document.createElement('p');
                     hint.textContent =
                         'Der Cookie-Banner ist deshalb außer Betrieb. ' +
                         'Eine Lizenz für diese Domain erhalten Sie über den Complyo-Support.';
-                    hint.style.cssText = 'margin:0;font-size:14px;opacity:.7';
+                    hint.style.cssText = 'margin:0;font-size:14px;color:var(--complyo-muted,#595959)';
 
                     box.appendChild(heading);
                     box.appendChild(body);
@@ -342,9 +347,10 @@
                 bar.setAttribute('role', 'alert');
                 bar.style.cssText = [
                     'position:fixed', 'left:0', 'right:0', 'bottom:0', 'z-index:2147483647',
-                    'background:#1f2937', 'color:#f9fafb', 'padding:14px 18px',
-                    'font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif',
-                    'text-align:center', 'box-shadow:0 -2px 12px rgba(0,0,0,.25)'
+                    'background:var(--complyo-bg,#fff)', 'color:var(--complyo-text,#333)',
+                    'padding:14px 18px', 'box-sizing:border-box',
+                    'font:14px/1.5 var(--complyo-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif)',
+                    'text-align:center', 'box-shadow:0 -8px 32px rgba(0,0,0,.12),0 -2px 8px rgba(0,0,0,.08)'
                 ].join(';');
                 bar.textContent = text;
                 document.body.appendChild(bar);
@@ -852,8 +858,64 @@
                 Object.keys(mapped).forEach(k => mapped[k] === undefined && delete mapped[k]);
                 this.config.texts = { ...this.config.texts, ...mapped };
             }
+
+            this.applyDesignTokens();
         }
-        
+
+        /**
+         * Gemeinsame Gestaltung aller Complyo-Oberflaechen auf der Kundenseite.
+         *
+         * Der Banner ist die Vorlage. Alles, was das Produkt sonst noch
+         * anzeigt (Platzhalter fuer gesperrte Einbettungen im Content-Blocker,
+         * Lizenzhinweis, kuenftige Widgets), liest seine Farben, Schrift und
+         * Rundungen aus diesen Variablen, statt eigene Werte zu fuehren. Eine
+         * neue Oberflaeche weicht damit nicht mehr vom Banner ab und muss nicht
+         * je Kunde nachgebessert werden. Die Variablen stehen auf :root, sobald
+         * die Konfiguration geladen ist; Platzhalter, die vorher entstehen,
+         * ziehen automatisch nach (CSS-Variablen werden live aufgeloest).
+         *
+         * Die Werte kommen aus der Kundenkonfiguration und landen in einem
+         * <style>: nur Hex-Farben werden durchgelassen.
+         */
+        applyDesignTokens() {
+            try {
+                const K = this.constructor;
+                const farbe = (v, rueckfall) =>
+                    (typeof v === 'string' && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v.trim()))
+                        ? v.trim() : rueckfall;
+                const primary = farbe(this.config.primaryColor, DEFAULT_CONFIG.primaryColor);
+                const accent = farbe(this.config.accentColor, DEFAULT_CONFIG.accentColor);
+                const text = farbe(this.config.textColor, DEFAULT_CONFIG.textColor);
+                const bg = farbe(this.config.bgColor, DEFAULT_CONFIG.bgColor);
+                const radius = this.config.buttonStyle === 'pill' ? '100px'
+                    : this.config.buttonStyle === 'square' ? '6px' : '10px';
+                const tokens = {
+                    '--complyo-primary': primary,
+                    '--complyo-on-primary': K.lesbareSchrift(primary),
+                    '--complyo-accent': accent,
+                    '--complyo-on-accent': K.lesbareSchrift(accent),
+                    '--complyo-bg': bg,
+                    '--complyo-text': text,
+                    '--complyo-muted': K.gedaempfteSchrift(text, bg),
+                    '--complyo-link': K.lesbareMarkenschrift(primary, bg),
+                    '--complyo-radius-btn': radius,
+                    '--complyo-radius-card': '12px',
+                    '--complyo-font': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+                };
+                const css = ':root{' + Object.keys(tokens)
+                    .map(k => k + ':' + tokens[k]).join(';') + '}';
+                let el = document.getElementById('complyo-design-tokens');
+                if (!el) {
+                    el = document.createElement('style');
+                    el.id = 'complyo-design-tokens';
+                    (document.head || document.documentElement).appendChild(el);
+                }
+                el.textContent = css;
+            } catch (e) {
+                console.warn('[Complyo] Design-Variablen konnten nicht gesetzt werden:', e);
+            }
+        }
+
         /**
          * ✅ Phase 7: Detect browser language
          */
