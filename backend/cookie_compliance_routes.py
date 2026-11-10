@@ -2215,15 +2215,11 @@ async def scan_website(
             raise HTTPException(status_code=400, detail="URL required")
         
         # Site-ID aus URL generieren wenn nicht angegeben
-        site_id = data.get('site_id')
-        if not site_id:
-            try:
-                from urllib.parse import urlparse
-                parsed = urlparse(url if url.startswith('http') else f'https://{url}')
-                hostname = parsed.netloc.replace('www.', '')
-                site_id = hostname.replace('.', '-').lower()
-            except:
-                site_id = 'unknown-site'
+        try:
+            abgeleitet = _url_to_site_id(url) or 'unknown-site'
+        except Exception:
+            abgeleitet = 'unknown-site'
+        site_id = data.get('site_id') or abgeleitet
 
         # ✅ Authentifizierten User ermitteln (optional): Die gespeicherte Config
         #    MUSS dem User zugeordnet werden (user_id), sonst findet /my-config sie
@@ -2250,6 +2246,11 @@ async def scan_website(
             speicherung = "fremde_website"
         else:
             speicherung = "gespeichert"
+        if schreibziel is None:
+            # Ohne Schreibziel zaehlt nur die gemessene Adresse. Eine site_id aus
+            # dem Rumpf wuerde sonst den Stand der Browser-Pruefung einer fremden
+            # Website mit den Ergebnissen einer anderen Adresse ueberschreiben.
+            site_id = abgeleitet
 
         logger.warning(
             f"[Scan] START url={url} site_id={site_id} user_id={user_id} speicherung={speicherung}"
@@ -2394,13 +2395,15 @@ async def scan_website(
         # Pruefstufe im Browser: NACH der Antwort-Vorbereitung und nur als
         # Auftrag in eine begrenzte Schlange. Sie darf diesen Scan nie
         # aufhalten oder scheitern lassen (compliance_engine/cookie_pruefstufe.py).
+        # Gemessen wird fuer jeden, ergaenzt (anwenden_ja) nur, wo auch der
+        # HTML-Scan speichern durfte.
         pruefstufe = {"zustand": "aus"}
-        if config_updated:
+        if site_id and site_id != 'unknown-site':
             try:
                 from compliance_engine import cookie_pruefstufe
                 pruefstufe = await cookie_pruefstufe.einreihen(
                     site_id, scan_result.get('url') or url, pool=db_pool,
-                    html_keys=service_keys_found, anwenden_ja=True,
+                    html_keys=service_keys_found, anwenden_ja=config_updated,
                     prio=(cookie_pruefstufe.PRIO_NUTZER if user_id
                           else cookie_pruefstufe.PRIO_ANONYM),
                 )

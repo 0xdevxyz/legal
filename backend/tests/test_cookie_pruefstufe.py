@@ -739,15 +739,22 @@ class TestRouteAnbindung:
                 "confidence": {"google_fonts": 0.9}, "privacy_findings": [], "detected_cms": None,
                 "brand_colors": None, "scripts": [], "iframes": [], "scan_timestamp": "x"}
 
-    async def _aufruf(self, einreihen_ersatz):
+    async def _aufruf(self, einreihen_ersatz, angemeldet=False, rumpf=None):
         import cookie_compliance_routes as r
+        from unittest.mock import AsyncMock
         pool = self.Pool()
 
         async def licht(url):
             return self._licht()
+        rumpf = rumpf or {"url": "kunde.de", "site_id": "kunde-de"}
         with patch.object(r.cookie_scanner, "scan_website", licht), \
-             patch.object(ps, "einreihen", einreihen_ersatz):
-            return await r.scan_website(None, {"url": "kunde.de", "site_id": "kunde-de"}, None, pool), pool
+             patch.object(ps, "einreihen", einreihen_ersatz), \
+             patch.object(r, "get_current_user_optional",
+                          AsyncMock(return_value={"id": 7} if angemeldet else None)), \
+             patch.object(r, "get_user_id_from_token", AsyncMock(return_value=7)), \
+             patch.object(r, "get_user_site_ids", AsyncMock(return_value={"kunde-de"})), \
+             patch.object(r, "get_user_website_site_id", AsyncMock(return_value="kunde-de")):
+            return await r.scan_website(None, rumpf, None, pool), pool
 
     async def test_antwort_traegt_den_stand_der_pruefstufe(self):
         gesehen = {}
@@ -755,11 +762,28 @@ class TestRouteAnbindung:
         async def ersatz(site_id, url, **kw):
             gesehen.update(site_id=site_id, url=url, **kw)
             return {"zustand": "wartend", "position": 3}
-        antwort, _ = await self._aufruf(ersatz)
+        antwort, _ = await self._aufruf(ersatz, angemeldet=True)
         assert antwort["success"] is True
         assert antwort["pruefstufe"] == {"zustand": "wartend", "position": 3}
         assert gesehen["site_id"] == "kunde-de" and gesehen["html_keys"] == ["google_fonts"]
-        assert gesehen["anwenden_ja"] is True and gesehen["prio"] == ps.PRIO_ANONYM
+        assert gesehen["anwenden_ja"] is True and gesehen["prio"] == ps.PRIO_NUTZER
+
+    async def test_ohne_anmeldung_misst_die_pruefstufe_nur(self):
+        """Seit dem 10.11.2026 speichert der Scan nur am eigenen Ziel. Die
+        Browser-Pruefung laeuft fuer anonyme Scans weiter, ergaenzt aber nichts,
+        und ihr Stand haengt an der gemessenen Adresse, nicht an einer site_id
+        aus dem Rumpf."""
+        gesehen = {}
+
+        async def ersatz(site_id, url, **kw):
+            gesehen.update(site_id=site_id, url=url, **kw)
+            return {"zustand": "wartend"}
+        antwort, pool = await self._aufruf(
+            ersatz, rumpf={"url": "anders.de", "site_id": "kunde-de"})
+        assert antwort["config_updated"] is False
+        assert pool.gespeichert == []
+        assert gesehen["site_id"] == "anders-de"
+        assert gesehen["anwenden_ja"] is False and gesehen["prio"] == ps.PRIO_ANONYM
 
     async def test_ausfall_der_pruefstufe_laesst_den_scan_unberuehrt(self):
         async def kaputt(site_id, url, **kw):

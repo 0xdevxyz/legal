@@ -151,7 +151,19 @@ def test_ohne_anmeldung_wird_gemessen_aber_nichts_geschrieben(monkeypatch):
     assert _schreibaufrufe(pool) == [], (
         "Ohne Anmeldung darf der Scan keine Bannerkonfiguration anfassen."
     )
-    einreihen.assert_not_awaited()
+    # Die Browser-Pruefung misst weiter, ergaenzt aber nichts.
+    assert einreihen.await_args.kwargs["anwenden_ja"] is False
+
+
+def test_ohne_anmeldung_zaehlt_die_gemessene_adresse_nicht_die_site_id(monkeypatch):
+    """Sonst stuende unter der Kennung des Kunden der Pruefstand einer anderen Seite."""
+    client, pool, einreihen = _aufbau(monkeypatch, nutzer=None)
+
+    daten = client.post("/api/cookie-compliance/scan",
+                        json={"url": "https://anders.de", "site_id": "kunde-de"}).json()
+
+    assert daten["site_id"] == "anders-de"
+    assert einreihen.await_args.args[0] == "anders-de"
 
 
 def test_angemeldet_an_der_eigenen_website_wird_gespeichert(monkeypatch):
@@ -204,7 +216,7 @@ def test_konto_ohne_website_ueberschreibt_keine_vorhandene_konfiguration(monkeyp
     assert daten["config_updated"] is False
     assert daten["speicherung"] == "fremde_website"
     assert _schreibaufrufe(pool) == []
-    einreihen.assert_not_awaited()
+    assert einreihen.await_args.kwargs["anwenden_ja"] is False
 
 
 def test_fehler_beim_ermitteln_des_kontos_heisst_nicht_speichern(monkeypatch):

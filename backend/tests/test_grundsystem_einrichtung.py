@@ -345,6 +345,20 @@ class TestMarkenfarben:
         assert v["farben"]["primary_color"] == "#7c3aed"
 
 
+def _angemeldet(monkeypatch, modul, site="kunde-de"):
+    """Gespeichert wird seit dem 10.11.2026 nur noch am eigenen Ziel
+    (scan_schreibziel, tests/test_scan_schreibziel.py). Die Farbtests brauchen
+    deshalb ein Konto, dem die Website gehoert."""
+    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value={"id": 7}))
+    monkeypatch.setattr(modul, "get_user_id_from_token", AsyncMock(return_value=7))
+    monkeypatch.setattr(modul, "get_user_site_ids", AsyncMock(return_value={site}))
+    monkeypatch.setattr(modul, "get_user_website_site_id", AsyncMock(return_value=site))
+    import compliance_engine.markenfarben_gerendert as gerendert
+    monkeypatch.setattr(gerendert, "markenfarben_gerendert", AsyncMock(return_value=None))
+    from compliance_engine import cookie_pruefstufe
+    monkeypatch.setattr(cookie_pruefstufe, "einreihen", AsyncMock(return_value={"zustand": "aus"}))
+
+
 def _scanner_mit_farben(scraped=True):
     scanner = MagicMock()
     scanner.scan_website = AsyncMock(return_value={
@@ -363,7 +377,7 @@ def test_neue_konfiguration_startet_mit_markenfarben(monkeypatch):
     pool.fetchrow = AsyncMock(return_value=None)          # noch keine Config -> INSERT
     pool.execute = AsyncMock(return_value="INSERT 0 1")
     monkeypatch.setattr(modul, "db_pool", pool)
-    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    _angemeldet(monkeypatch, modul)
     monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben())
 
     daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
@@ -382,7 +396,7 @@ def test_bestehende_konfiguration_behaelt_ihre_farben(monkeypatch):
     pool.fetchrow = AsyncMock(return_value={"id": 1})     # Config existiert -> UPDATE
     pool.execute = AsyncMock(return_value="UPDATE 1")
     monkeypatch.setattr(modul, "db_pool", pool)
-    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    _angemeldet(monkeypatch, modul)
     monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben())
 
     daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
@@ -399,7 +413,7 @@ def test_ohne_markenfarben_bleibt_insert_wie_bisher(monkeypatch):
     pool.fetchrow = AsyncMock(return_value=None)
     pool.execute = AsyncMock(return_value="INSERT 0 1")
     monkeypatch.setattr(modul, "db_pool", pool)
-    monkeypatch.setattr(modul, "get_current_user_optional", AsyncMock(return_value=None))
+    _angemeldet(monkeypatch, modul)
     monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben(scraped=False))
 
     daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
