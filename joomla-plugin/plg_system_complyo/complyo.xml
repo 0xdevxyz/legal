@@ -7,11 +7,12 @@
     <creationDate>2026-04</creationDate>
     <copyright>Copyright (C) 2026 Complyo. All rights reserved.</copyright>
     <license>GPL-2.0-or-later</license>
-    <version>2.1.0</version>
+    <version>2.2.0</version>
     <description>PLG_SYSTEM_COMPLYO_DESCRIPTION</description>
 
     <files>
         <filename plugin="complyo">complyo.php</filename>
+        <filename>ComplyoMarkup.php</filename>
         <folder>language</folder>
     </files>
 
@@ -41,6 +42,18 @@
                     type="radio"
                     label="PLG_SYSTEM_COMPLYO_COOKIE_LABEL"
                     description="PLG_SYSTEM_COMPLYO_COOKIE_DESC"
+                    default="1"
+                    layout="joomla.form.field.radio.switcher"
+                >
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+
+                <field
+                    name="enable_markup_blocker"
+                    type="radio"
+                    label="PLG_SYSTEM_COMPLYO_MARKUP_LABEL"
+                    description="PLG_SYSTEM_COMPLYO_MARKUP_DESC"
                     default="1"
                     layout="joomla.form.field.radio.switcher"
                 >

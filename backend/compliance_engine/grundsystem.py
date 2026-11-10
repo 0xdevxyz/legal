@@ -57,7 +57,9 @@ SCHNIPSEL_HINWEISE: Dict[str, str] = {
     "drupal":      "Im Theme-Template html.html.twig im <head> einfuegen oder per Asset Injector.",
     "webflow":     "Site Settings, Custom Code, Head Code: Schnipsel einfuegen.",
     "squarespace": "Einstellungen, Erweitert, Code-Injektion, Header: Schnipsel einfuegen.",
-    "html":        "In jeder HTML-Datei direkt vor </head> einfuegen, am besten im Template.",
+    "html":        "In jeder HTML-Datei direkt nach <head> einfuegen, am besten im Template. "
+                   "Fest eingebaute Tracker, Videos und Karten einmal umschreiben "
+                   "(src wird zu data-complyo-src), sonst laedt der Browser sie vor der Einwilligung.",
 }
 
 

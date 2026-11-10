@@ -94,7 +94,8 @@ class TestEinrichtungsweg:
             "plugin_download_pfad": None,
             "anleitung": w["anleitung"],
         }
-        assert "</head>" in w["anleitung"]
+        assert "<head>" in w["anleitung"]
+        assert "data-complyo-src" in w["anleitung"]
 
     def test_shopify_schnipsel_mit_eigenem_hinweis(self):
         w = einrichtungsweg("Shopify")

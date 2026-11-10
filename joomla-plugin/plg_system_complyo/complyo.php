@@ -70,6 +70,28 @@ class PlgSystemComplyo extends CMSPlugin
         $scripts = $this->buildBannerScripts($enable_cookie, $enable_a11y);
 
         $body = $app->getBody();
+
+        // Tracker im Markup neutralisieren (seit 2.2.0, wie WordPress-Plugin 2.7.0):
+        // Der Vorlade-Scanner des Browsers holt fest eingebaute <script src>,
+        // <iframe src> und Google-Fonts-<link>, bevor der Blocker greift. Nur
+        // Markup ohne src/href verhindert den Abruf vor der Einwilligung.
+        // VOR dem Einhaengen der eigenen Skripte, und jeder Fehler laesst die
+        // Seite unveraendert.
+        if ($enable_cookie && (bool) $this->params->get('enable_markup_blocker', 1)) {
+            try {
+                if (!class_exists('ComplyoMarkup')) {
+                    require_once __DIR__ . '/ComplyoMarkup.php';
+                }
+                $neu = ComplyoMarkup::rewrite($body);
+                if (is_string($neu) && $neu !== '') {
+                    $body = $neu;
+                    $app->setBody($body);
+                }
+            } catch (\Throwable $e) {
+                // Seite unveraendert ausliefern.
+            }
+        }
+
         // Nur das LETZTE </body> ersetzen. str_replace() würde JEDES Vorkommen
         // treffen – auch </body> in Text-/JS-Strings der Seite – und die Skripte
         // mehrfach bzw. an falscher Stelle injizieren. strripos()+substr_replace()

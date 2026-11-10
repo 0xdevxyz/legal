@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { API_BASE as PLUGIN_API_BASE, Grundsystem, integrationsTab, pluginSchritte } from '@/lib/grundsystem';
+import TrackerUmschreiben from './TrackerUmschreiben';
 
 interface IntegrationGuideProps {
   siteId: string;
@@ -295,8 +296,9 @@ export default function Document() {
               <ol className="space-y-3">
                 {[
                   'Öffnen Sie Ihre HTML-Datei(en) in einem Editor',
-                  'Fügen Sie den Code im <head> Bereich ein',
+                  'Fügen Sie den Code im <head> Bereich ein, als erstes Skript',
                   'Wiederholen Sie dies für alle Seiten oder nutzen Sie ein Template',
+                  'Schreiben Sie fest eingebaute Tracker, Videos und Karten um (siehe Hinweis unten)',
                   'Laden Sie die Dateien auf Ihren Server hoch'
                 ].map((step, idx) => (
                   <li key={idx} className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300">
@@ -372,6 +374,10 @@ export default function Document() {
         </CardContent>
       </Card>
       
+      {/* Einbau per Schnipsel: fest eingebaute Tracker im Markup umschreiben.
+          Mit Plugin (WordPress, Joomla) erledigt das der Server. */}
+      {grundsystem?.einrichtung !== 'plugin' && <TrackerUmschreiben />}
+
       {/* Testing */}
       <Card className="border-gray-200 dark:border-gray-700 bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
         <CardHeader>

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { apiClient } from '@/lib/api-client';
 import { API_BASE, Grundsystem, istGrundsystem, pluginDownloadUrl, pluginSchritte } from '@/lib/grundsystem';
+import TrackerUmschreiben from './TrackerUmschreiben';
 
 interface CookieSetupWizardProps {
   websiteUrl?: string;
@@ -387,6 +388,8 @@ const CookieSetupWizard: React.FC<CookieSetupWizardProps> = ({
               ) : (
                 <>
                   {codeBlock}
+
+                  <TrackerUmschreiben kompakt />
 
                   {grundsystem?.anleitung && (
                     <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
