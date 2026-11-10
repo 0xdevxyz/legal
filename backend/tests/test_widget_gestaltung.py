@@ -80,6 +80,13 @@ class TestPlatzhalterOhneEigeneFarben:
                 verstoesse.append((nr, zeile.strip()))
         assert not verstoesse, f"feste Farben im Platzhalter: {verstoesse}"
 
+    def test_kein_aufblitzen_der_rueckfallfarbe(self):
+        # Live gemessen 10.11.2026: die Konfiguration kommt erst nach mehreren
+        # Sekunden, bis dahin stand der Platzhalter in der Rueckfallfarbe.
+        assert "data-complyo-tokens" in TOKENS
+        assert "[data-complyo-tokens] .complyo-content-placeholder" in PLATZHALTER
+        assert "animation: complyoPlaceholderIn" in PLATZHALTER  # Notausgang nach 1,5 s
+
     def test_knoepfe_sind_echte_buttons(self):
         # Tastatur und Screenreader (WCAG 2.1.1, 4.1.2): kein klickbares <div>.
         assert PLATZHALTER.count('<button type="button"') >= 2

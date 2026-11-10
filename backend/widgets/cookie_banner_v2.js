@@ -911,6 +911,7 @@
                     (document.head || document.documentElement).appendChild(el);
                 }
                 el.textContent = css;
+                document.documentElement.setAttribute('data-complyo-tokens', '1');
             } catch (e) {
                 console.warn('[Complyo] Design-Variablen konnten nicht gesetzt werden:', e);
             }

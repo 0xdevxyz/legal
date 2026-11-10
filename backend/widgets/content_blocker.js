@@ -869,6 +869,18 @@
                     overflow: hidden;
                 }
                 .complyo-content-placeholder * { box-sizing: border-box; }
+                /* Erst zeigen, wenn der Banner seine Variablen gesetzt hat, sonst
+                   blitzt kurz die Rueckfallfarbe auf. Kommt der Banner nie (API
+                   weg, Lizenz), erscheint der Platzhalter nach 1,5 s trotzdem. */
+                .complyo-content-placeholder {
+                    opacity: 0;
+                    animation: complyoPlaceholderIn 0.01s linear 1.5s forwards;
+                }
+                [data-complyo-tokens] .complyo-content-placeholder {
+                    opacity: 1;
+                    animation: none;
+                }
+                @keyframes complyoPlaceholderIn { to { opacity: 1; } }
                 .complyo-placeholder-icon {
                     font-size: 36px;
                     line-height: 1;
@@ -893,7 +905,7 @@
                     padding: 13px 26px;
                     border: none;
                     border-radius: var(--complyo-radius-btn, 10px);
-                    background: var(--complyo-primary, #7c3aed);
+                    background: var(--complyo-primary, #1f2937);
                     color: var(--complyo-on-primary, #ffffff);
                     font: inherit;
                     font-size: 15px;
@@ -904,7 +916,7 @@
                     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
                 }
                 .complyo-placeholder-btn:hover {
-                    background: var(--complyo-accent, #9333ea);
+                    background: var(--complyo-accent, #111827);
                     color: var(--complyo-on-accent, #ffffff);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
                 }
@@ -915,13 +927,13 @@
                     background: none;
                     font: inherit;
                     font-size: 14px;
-                    color: var(--complyo-link, #6d28d9);
+                    color: var(--complyo-link, #1f2937);
                     text-decoration: underline;
                     cursor: pointer;
                 }
                 .complyo-placeholder-btn:focus-visible,
                 .complyo-placeholder-link:focus-visible {
-                    outline: 3px solid var(--complyo-link, #6d28d9);
+                    outline: 3px solid var(--complyo-link, #1f2937);
                     outline-offset: 2px;
                 }
             `;
