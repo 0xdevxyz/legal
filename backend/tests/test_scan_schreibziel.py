@@ -35,12 +35,13 @@ BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # 1) Die Zielregel
 # ============================================================================
 
-def _regel(monkeypatch, eigene, primaer, zeile_vorhanden=False):
+def _regel(monkeypatch, eigene, primaer, zeile_vorhanden=False, besitzer=99):
+    """besitzer: user_id der vorhandenen Zeile (99 = anderes Konto, None = verwaist)."""
     import cookie_compliance_routes as modul
     monkeypatch.setattr(modul, "get_user_site_ids", AsyncMock(return_value=set(eigene)))
     monkeypatch.setattr(modul, "get_user_website_site_id", AsyncMock(return_value=primaer))
     pool = MagicMock()
-    pool.fetchrow = AsyncMock(return_value={"id": 1} if zeile_vorhanden else None)
+    pool.fetchrow = AsyncMock(return_value={"id": 1, "user_id": besitzer} if zeile_vorhanden else None)
     return modul, pool
 
 
@@ -63,9 +64,26 @@ async def test_agenturkonto_trifft_die_gewaehlte_website_nicht_die_primaere(monk
 
 
 @pytest.mark.asyncio
-async def test_fremde_website_faellt_auf_die_eigene_primaere(monkeypatch):
+async def test_unbekannte_adresse_faellt_auf_die_eigene_primaere(monkeypatch):
+    """Abweichende Schreibweise oder Unterseite der eigenen Website: wie bisher."""
     modul, pool = _regel(monkeypatch, eigene={"kunde-de"}, primaer="kunde-de")
-    assert await modul.scan_schreibziel(7, "opfer-de", pool) == "kunde-de"
+    assert await modul.scan_schreibziel(7, "shop-kunde-de", pool) == "kunde-de"
+
+
+@pytest.mark.asyncio
+async def test_website_eines_anderen_kontos_wird_nur_gemessen(monkeypatch):
+    """Erstbesitz (11.11.2026): kein Rueckfall auf die eigene primaere Website,
+    sonst stuende deren Dienstliste danach mit den Diensten der fremden da."""
+    modul, pool = _regel(monkeypatch, eigene={"kunde-de"}, primaer="kunde-de",
+                         zeile_vorhanden=True, besitzer=99)
+    assert await modul.scan_schreibziel(7, "opfer-de", pool) is None
+
+
+@pytest.mark.asyncio
+async def test_verwaiste_zeile_einer_fremden_adresse_faellt_wie_bisher_zurueck(monkeypatch):
+    modul, pool = _regel(monkeypatch, eigene={"kunde-de"}, primaer="kunde-de",
+                         zeile_vorhanden=True, besitzer=None)
+    assert await modul.scan_schreibziel(7, "anders-de", pool) == "kunde-de"
 
 
 @pytest.mark.asyncio
@@ -91,7 +109,7 @@ async def test_konto_ohne_website_fasst_keine_vorhandene_zeile_an(monkeypatch):
 # 2) Die Route
 # ============================================================================
 
-def _aufbau(monkeypatch, *, nutzer, eigene=(), primaer=None, zeile_vorhanden=True):
+def _aufbau(monkeypatch, *, nutzer, eigene=(), primaer=None, zeile_vorhanden=True, besitzer=7):
     import cookie_compliance_routes as modul
     app = FastAPI()
     app.include_router(modul.router)
@@ -102,7 +120,7 @@ def _aufbau(monkeypatch, *, nutzer, eigene=(), primaer=None, zeile_vorhanden=Tru
         {"service_key": "google_analytics_ga4", "name": "Google Analytics 4",
          "category": "analytics", "description": "", "cookies": []},
     ])
-    pool.fetchrow = AsyncMock(return_value={"id": 1} if zeile_vorhanden else None)
+    pool.fetchrow = AsyncMock(return_value={"id": 1, "user_id": besitzer} if zeile_vorhanden else None)
     pool.execute = AsyncMock(return_value="UPDATE 1")
     monkeypatch.setattr(modul, "db_pool", pool)
 
@@ -194,21 +212,34 @@ def test_agenturkonto_speichert_an_der_gewaehlten_website(monkeypatch):
     )
 
 
-def test_angemeldet_an_fremder_website_trifft_die_fremde_nie(monkeypatch):
+def test_angemeldet_an_der_website_eines_anderen_kontos_wird_nichts_geschrieben(monkeypatch):
+    client, pool, _ = _aufbau(
+        monkeypatch, nutzer={"id": 7}, eigene={"kunde-de"}, primaer="kunde-de", besitzer=99)
+
+    daten = client.post("/api/cookie-compliance/scan",
+                        json={"url": "https://opfer.de", "site_id": "opfer-de"}).json()
+
+    assert daten["total_found"] == 1, "Gemessen wird weiter."
+    assert daten["speicherung"] == "fremde_website"
+    assert _schreibaufrufe(pool) == [], (
+        "Weder die fremde Konfiguration noch ersatzweise die eigene darf geschrieben werden."
+    )
+
+
+def test_unbekannte_adresse_schreibt_an_die_eigene_primaere(monkeypatch):
     client, pool, _ = _aufbau(
         monkeypatch, nutzer={"id": 7}, eigene={"kunde-de"}, primaer="kunde-de")
+    pool.fetchrow = AsyncMock(side_effect=[None, {"id": 1, "user_id": 7}])
 
     client.post("/api/cookie-compliance/scan",
-                json={"url": "https://opfer.de", "site_id": "opfer-de"})
+                json={"url": "https://shop.kunde.de", "site_id": "shop-kunde-de"})
 
-    ziele = {a.args[1] for a in _schreibaufrufe(pool)}
-    assert "opfer-de" not in ziele
-    assert ziele <= {"kunde-de"}
+    assert {a.args[1] for a in _schreibaufrufe(pool)} == {"kunde-de"}
 
 
 def test_konto_ohne_website_ueberschreibt_keine_vorhandene_konfiguration(monkeypatch):
     client, pool, einreihen = _aufbau(
-        monkeypatch, nutzer={"id": 7}, eigene=set(), primaer=None, zeile_vorhanden=True)
+        monkeypatch, nutzer={"id": 7}, eigene=set(), primaer=None, zeile_vorhanden=True, besitzer=99)
 
     daten = client.post("/api/cookie-compliance/scan",
                         json={"url": "https://opfer.de", "site_id": "opfer-de"}).json()

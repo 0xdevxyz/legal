@@ -269,7 +269,39 @@ async def get_user_site_ids(user_id: Any) -> set:
         for r in await conn.fetch("SELECT site_id FROM cookie_banner_configs WHERE user_id = $1", user_id):
             if r['site_id']:
                 site_ids.add(r['site_id'])
+        # Erstbesitz (11.11.2026): Eine Adresse im Konto anzulegen kostet nichts
+        # und braucht keinen Nachweis. Solange das allein als Besitz galt, konnte
+        # jedes Konto die Adresse eines fremden Kunden anlegen und danach dessen
+        # Banner, Alt-Texte und Widget-Einstellungen aendern. Deshalb: hat die
+        # Bannerkonfiguration einer Website schon einen Besitzer, zaehlt die
+        # Website nur fuer ihn. Verwaiste Zeilen (user_id NULL) bleiben
+        # uebernehmbar; ein geloeschtes Konto nimmt seine Zeilen mit (ON DELETE
+        # CASCADE). Ein gewollter Wechsel des Besitzers ist Handarbeit des
+        # Betreibers (user_id der Zeile umsetzen), kein Selbstbedienungsweg.
+        if site_ids:
+            vergeben = await conn.fetch(
+                "SELECT site_id FROM cookie_banner_configs "
+                "WHERE site_id = ANY($1::text[]) AND user_id IS NOT NULL AND user_id <> $2",
+                sorted(site_ids), user_id,
+            )
+            fremd = {r['site_id'] for r in vergeben}
+            if fremd:
+                logger.warning(f"User {user_id}: {len(fremd)} Website(s) gehoeren einem anderen Konto und zaehlen nicht als eigene")
+            site_ids -= fremd
     return site_ids
+
+
+async def fremd_vergeben(site_id: Optional[str], user_id: Any, pool) -> bool:
+    """True, wenn die Bannerkonfiguration dieser Website einem ANDEREN Konto gehoert."""
+    if not site_id:
+        return False
+    row = await pool.fetchrow(
+        "SELECT user_id FROM cookie_banner_configs WHERE site_id = $1", site_id
+    )
+    if not row:
+        return False
+    besitzer = row['user_id']
+    return besitzer is not None and besitzer != user_id
 
 
 async def scan_schreibziel(user_id: Any, kandidat: Optional[str], pool) -> Optional[str]:
@@ -285,6 +317,7 @@ async def scan_schreibziel(user_id: Any, kandidat: Optional[str], pool) -> Optio
     - gehoert die angefragte Website dem Konto (get_user_site_ids): dorthin.
       Agenturkonten treffen damit die gewaehlte Website und nicht mehr die
       primaere.
+    - gehoert sie einem ANDEREN Konto (fremd_vergeben): nirgends.
     - sonst die primaere Website des Kontos (abweichende Schreibweise, www,
       Unterseite; bisheriges Verhalten fuer Einzelkonten).
     - Konto ganz ohne Website: nur neu anlegen, nie eine vorhandene Zeile
@@ -295,6 +328,11 @@ async def scan_schreibziel(user_id: Any, kandidat: Optional[str], pool) -> Optio
     eigene = await get_user_site_ids(user_id)
     if kandidat in eigene:
         return kandidat
+    # Gehoert die gemessene Website einem anderen Konto, bleibt es bei der Messung.
+    # Der Rueckfall auf die primaere Website wuerde sonst die Dienstliste der
+    # eigenen Website mit der einer fremden ueberschreiben.
+    if await fremd_vergeben(kandidat, user_id, pool):
+        return None
     primaer = await get_user_website_site_id(user_id)
     if primaer:
         return primaer
@@ -1306,13 +1344,28 @@ async def create_or_update_config(
         # primäre Website zwingen, sondern gegen ALLE Sites des Users prüfen.
         # Schützt zugleich vor Cross-Tenant-Writes auf fremde site_ids.
         owned_site_ids = await get_user_site_ids(user_id)
-        if owned_site_ids and config.site_id not in owned_site_ids:
-            fallback = await get_user_website_site_id(user_id) or next(iter(owned_site_ids))
-            logger.warning(
-                f"User {user_id} tried to configure foreign site_id '{config.site_id}'. "
-                f"Falling back to '{fallback}'."
+        if config.site_id not in owned_site_ids:
+            # Gehoert die Konfiguration einem anderen Konto, wird nichts gespeichert,
+            # auch nicht ersatzweise an der eigenen Website: der Rueckfall wuerde die
+            # eigene Konfiguration mit Einstellungen ueberschreiben, die fuer eine
+            # andere Website gedacht waren. Bis zum 11.11.2026 kam ein Konto ganz
+            # ohne Website hier sogar ungeprueft durch (`owned_site_ids and ...`)
+            # und konnte den Banner jeder fremden Site umschreiben.
+            # Ein Konto ohne jede Website darf nur neu anlegen: eine vorhandene Zeile
+            # ist dann entweder fremd oder verwaist, in beiden Faellen nicht seine.
+            zeile = await db_pool.fetchrow(
+                "SELECT user_id FROM cookie_banner_configs WHERE site_id = $1", config.site_id
             )
-            config.site_id = fallback
+            if zeile and (zeile['user_id'] is not None or not owned_site_ids):
+                logger.warning(f"User {user_id} denied saving foreign site_id '{config.site_id}'")
+                raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Website")
+            if owned_site_ids:
+                fallback = await get_user_website_site_id(user_id) or next(iter(owned_site_ids))
+                logger.warning(
+                    f"User {user_id} tried to configure foreign site_id '{config.site_id}'. "
+                    f"Falling back to '{fallback}'."
+                )
+                config.site_id = fallback
         
         # Reconsent-Steuerung: Hash der einwilligungsrelevanten Config (Services).
         # Aendert sich der Hash gegenueber dem gespeicherten Stand, muessen die
@@ -1468,6 +1521,10 @@ async def create_or_update_config(
                 "revision": result['revision']
             }
         
+    except HTTPException:
+        # 401/403 sind Antworten, keine Stoerung. Ohne diese Zeile wurde jede
+        # Ablehnung zu einem 500 "Failed to save configuration".
+        raise
     except Exception as e:
         print(f"Error saving banner config: {e}")
         raise HTTPException(status_code=500, detail="Failed to save configuration")
