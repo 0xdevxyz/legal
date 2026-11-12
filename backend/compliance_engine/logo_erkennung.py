@@ -89,7 +89,7 @@ LOGO_JS = """
     // Nachladen einen data:-Platzhalter; die echte Adresse steht im Datenattribut.
     if (!src || /^data:/i.test(src)) {
       const ersatz = img.getAttribute('data-orig-src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') ||
-        ((img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').trim().split(/[\s,]+/)[0] || '');
+        ((img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').trim().split(/[\\s,]+/)[0] || '');
       if (ersatz && !/^data:/i.test(ersatz)) { try { src = new URL(ersatz, location.href).href; } catch (e) {} }
     }
     if (!src) continue;
