@@ -93,6 +93,29 @@ async def _speichere_banner_erzwingen(pool, site_id: str, wert) -> None:
         logger.warning("[Banner] banner_erzwingen nicht gespeichert: %s", e)
 
 
+async def _speichere_logo(pool, site_id: str, logo: Optional[dict]) -> bool:
+    """Erkanntes Logo der Website in custom_logo_url ablegen.
+
+    Nur, wenn dort nichts steht oder eine frueher selbst erkannte Adresse
+    (Fragment #complyo-auto, compliance_engine/logo_erkennung.py). Eine von
+    Hand gesetzte Adresse bleibt. Eigener Schreibvorgang wie bei
+    banner_erzwingen: das Logo darf den Scan nie scheitern lassen.
+    """
+    gespeichert = (logo or {}).get("gespeichert")
+    if not gespeichert:
+        return False
+    try:
+        res = await pool.execute(
+            "UPDATE cookie_banner_configs SET custom_logo_url = $2 "
+            "WHERE site_id = $1 AND (custom_logo_url IS NULL OR custom_logo_url = '' "
+            "OR custom_logo_url LIKE '%#complyo-auto%')",
+            site_id, gespeichert)
+        return str(res).endswith(" 1")
+    except Exception as e:
+        logger.warning("[Banner] Logo nicht gespeichert: %s", e)
+        return False
+
+
 def _enrich_third_country(service: dict) -> dict:
     """
     Reichert einen Service-Dict um Drittland-Infos an:
@@ -1406,8 +1429,18 @@ async def create_or_update_config(
                     logger.warning(f"[Cookie-Config] config_hash nicht aktualisiert: {hash_err2}")
 
         # Check if config exists
-        check_query = "SELECT id FROM cookie_banner_configs WHERE site_id = $1"
+        check_query = "SELECT id, custom_logo_url FROM cookie_banner_configs WHERE site_id = $1"
         existing = await db_pool.fetchrow(check_query, config.site_id)
+
+        # Logo: None heisst "nicht mitgeschickt" und aendert nichts (sonst loescht
+        # jedes Speichern aus einem Dashboard ohne dieses Feld das erkannte Logo),
+        # "" entfernt es, alles andere muss eine http(s)-Adresse sein.
+        from compliance_engine.logo_erkennung import bereinige_eingabe
+        logo_eingabe = bereinige_eingabe(config.custom_logo_url)
+        if logo_eingabe is None:
+            config.custom_logo_url = existing.get('custom_logo_url') if existing else None
+        else:
+            config.custom_logo_url = logo_eingabe or None
 
         if existing:
             # Update existing
@@ -2371,10 +2404,14 @@ async def scan_website(
         # Antwort und im Designer per Knopf.
         # Gerendert vor Quelltext: der Browser sieht die Knopf- und Kopffarbe,
         # der Quelltext-Extraktor zaehlt nur, was im CSS am haeufigsten steht.
+        # Derselbe Durchlauf liest das Logo der Website (logo_erkennung.py): es
+        # steht im Einstellungsfenster des Banners an der Stelle des Absenders.
+        logo: Dict[str, Any] = {}
         try:
             from compliance_engine.markenfarben_gerendert import markenfarben_gerendert
             gerendert = await markenfarben_gerendert(
-                url if url.startswith('http') else f'https://{url}', timeout_s=20.0
+                url if url.startswith('http') else f'https://{url}', timeout_s=20.0,
+                logo_ziel=logo,
             )
             if gerendert and gerendert.get('scraped'):
                 scan_result['brand_colors'] = gerendert
@@ -2432,6 +2469,10 @@ async def scan_website(
                 f"[Scan] nicht gespeichert ({speicherung}): url={url} site_id={site_id} user_id={user_id}"
             )
 
+        logo_gespeichert = False
+        if config_updated and logo.get("gespeichert"):
+            logo_gespeichert = await _speichere_logo(db_pool, site_id, logo)
+
         # Drittlandtransfer-Findings (abmahnfähig, KEIN Cookie-Problem) durchreichen.
         # Diese erscheinen unabhängig davon, ob Banner-Cookies gefunden wurden —
         # damit der Scanner bei extern geladenen Google Fonts & Co. nicht länger
@@ -2481,6 +2522,9 @@ async def scan_website(
             "farben_quelle": farben['quelle'],
             "farben_angepasst": farben['angepasst'],
             "farben_gespeichert": farben_gespeichert,
+            "logo": ({"url": logo.get("url"), "quelle": logo.get("quelle"), "grund": logo.get("grund")}
+                     if logo.get("url") else None),
+            "logo_gespeichert": logo_gespeichert,
             "privacy_findings_count": len(privacy_findings),
             "config_updated": config_updated,
             # gespeichert | ohne_anmeldung | fremde_website (siehe scan_schreibziel)

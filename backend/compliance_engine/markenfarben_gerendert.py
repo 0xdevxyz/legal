@@ -216,9 +216,15 @@ async def markenfarben_aus_seite(page, ausgeschlossen=frozenset()) -> Optional[D
     return bewerte_farbproben(proben or [], ausgeschlossen)
 
 
-async def markenfarben_gerendert(url: str, timeout_s: float = 20.0) -> Optional[Dict[str, Any]]:
+async def markenfarben_gerendert(url: str, timeout_s: float = 20.0,
+                                 logo_ziel: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """
     Seite im Browser laden und die sichtbaren Markenfarben lesen.
+
+    logo_ziel: wird ein Dict uebergeben, legt derselbe Browser-Durchlauf dort das
+    erkannte Logo der Website ab (compliance_engine/logo_erkennung.py), auch wenn
+    keine Markenfarbe gefunden wird. Ein zweiter Seitenaufruf nur fuer das Logo
+    waere ein zweiter Browser.
 
     None, wenn Playwright fehlt, die Seite nicht laedt oder nichts Buntes
     sichtbar ist; der Aufrufer faellt dann auf den Quelltext-Extraktor zurueck.
@@ -258,6 +264,11 @@ async def markenfarben_gerendert(url: str, timeout_s: float = 20.0) -> Optional[
                 except Exception:
                     pass
                 await asyncio.sleep(0.8)
+                if logo_ziel is not None:
+                    from compliance_engine.logo_erkennung import logo_aus_seite
+                    logo = await logo_aus_seite(page, page.url or url)
+                    if logo:
+                        logo_ziel.update(logo)
                 return await markenfarben_aus_seite(page, PLATTFORM_STANDARDFARBEN)
             finally:
                 await browser.close()

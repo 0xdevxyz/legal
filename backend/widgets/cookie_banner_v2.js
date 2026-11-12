@@ -24,7 +24,7 @@
     // Configuration & Constants
     // ========================================================================
     
-    const VERSION = '2.1.0';
+    const VERSION = '2.2.0';
     const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
@@ -793,6 +793,9 @@
             this.config.position = serverConfig.position || this.config.position;
             this.config.widthMode = serverConfig.width_mode || this.config.widthMode;
             this.config.showBranding = serverConfig.show_branding !== false;
+            // Logo der Website (vom Scan erkannt oder im Dashboard gesetzt). Es
+            // steht im Einstellungsfenster dort, wo frueher ein festes "C" stand.
+            this.config.logoUrl = typeof serverConfig.custom_logo_url === 'string' ? serverConfig.custom_logo_url : '';
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
             // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
@@ -2743,6 +2746,7 @@
             
             modal.innerHTML = this.renderSettingsHTML();
             document.body.appendChild(modal);
+            this.bindeLogo(modal);
             
             // Animate in
             requestAnimationFrame(() => {
@@ -2835,6 +2839,40 @@
                     color: white;
                     font-weight: bold;
                     font-size: 16px;
+                }
+                /* Logo der Website statt des Buchstabens. !important, weil Themes
+                   Bilder gern global umstellen (img { width: 100% } u. ae.). */
+                .cps-logo-bild {
+                    display: inline-flex;
+                    align-items: center;
+                    flex: 0 0 auto;
+                    height: 36px;
+                    max-width: 160px;
+                    box-sizing: border-box;
+                }
+                .cps-logo-bild img {
+                    display: block !important;
+                    width: auto !important;
+                    height: auto !important;
+                    max-width: 160px !important;
+                    max-height: 36px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    border-radius: 0 !important;
+                    box-shadow: none !important;
+                    object-fit: contain;
+                }
+                /* Fuer dunklen Grund gezeichnetes (helles) Logo: dunkle Unterlage,
+                   sonst waere es auf dem weissen Fenster unsichtbar. */
+                .cps-logo-bild--dunkel {
+                    background: #111827;
+                    border-radius: 8px;
+                    padding: 5px 9px;
+                }
+                .cps-logo-bild--dunkel img {
+                    max-height: 26px !important;
+                    max-width: 142px !important;
                 }
                 .cps-title {
                     font-size: 18px;
@@ -3199,11 +3237,97 @@
                     .cps-header-links {
                         display: none;
                     }
+                    .cps-logo-bild {
+                        max-width: 110px;
+                    }
+                    .cps-logo-bild img {
+                        max-width: 110px !important;
+                    }
+                    .cps-logo-bild--dunkel img {
+                        max-width: 92px !important;
+                    }
                 }
             `;
             document.head.appendChild(style);
         }
         
+        /**
+         * Anfangsbuchstabe der Website fuer den Kreis, wenn es kein Logo gibt
+         * oder es nicht laedt. Frueher stand hier fest "C".
+         */
+        markenBuchstabe() {
+            const host = String((window.location && window.location.hostname) || '').replace(/^www\./i, '');
+            const m = host.match(/[a-z0-9\u00c0-\u024f]/i);
+            return m ? m[0].toUpperCase() : 'C';
+        }
+
+        /**
+         * Logo der Website im Kopf des Einstellungsfensters. Die Adresse kommt
+         * aus der Konfiguration (custom_logo_url). Das Fragment sagt, ob das
+         * Logo fuer dunklen Grund gezeichnet ist (#complyo-auto-dunkel); es
+         * wird nicht mit ausgegeben.
+         */
+        logoHTML() {
+            const buchstabe = sanitizeText(this.markenBuchstabe());
+            const kreis = `<div class="cps-logo" aria-hidden="true">${buchstabe}</div>`;
+            const roh = String(this.config.logoUrl || '').trim();
+            if (!/^https?:\/\//i.test(roh)) return kreis;
+            const url = sanitizeUrl(roh.split('#')[0]);
+            if (!url || url === '#') return kreis;
+            const dunkel = roh.indexOf('#complyo-auto-dunkel') !== -1;
+            return `<span class="cps-logo-bild${dunkel ? ' cps-logo-bild--dunkel' : ''}" data-buchstabe="${buchstabe}">` +
+                   `<img src="${url}" alt="" decoding="async" /></span>`;
+        }
+
+        /**
+         * Nach dem Einhaengen: laedt das Logo nicht, kommt der Kreis mit dem
+         * Buchstaben zurueck. Ist das Logo fast weiss (fuer einen dunklen Kopf
+         * gezeichnet, den der Scan nicht als Farbe sehen konnte, etwa ueber
+         * einem Foto), bekommt es eine dunkle Unterlage. Das laesst sich nur
+         * bei Bildern vom eigenen Host messen; bei fremden wirft die Leinwand
+         * und es bleibt, wie es ist. Ohne Inline-Handler, damit eine strenge
+         * Content-Security-Policy der Kundenseite nichts blockiert.
+         */
+        bindeLogo(wurzel) {
+            const huelle = wurzel && wurzel.querySelector ? wurzel.querySelector('.cps-logo-bild') : null;
+            const img = huelle ? huelle.querySelector('img') : null;
+            if (!img) return;
+            const zurueck = () => {
+                const kreis = document.createElement('div');
+                kreis.className = 'cps-logo';
+                kreis.setAttribute('aria-hidden', 'true');
+                kreis.textContent = huelle.getAttribute('data-buchstabe') || 'C';
+                if (huelle.parentNode) huelle.parentNode.replaceChild(kreis, huelle);
+            };
+            const pruefeHelligkeit = () => {
+                if (!img.naturalWidth || !img.naturalHeight) { zurueck(); return; }
+                if (huelle.classList.contains('cps-logo-bild--dunkel')) return;
+                try {
+                    const b = Math.min(64, img.naturalWidth);
+                    const h = Math.max(1, Math.round(b * img.naturalHeight / img.naturalWidth));
+                    const leinwand = document.createElement('canvas');
+                    leinwand.width = b; leinwand.height = h;
+                    const ctx = leinwand.getContext('2d');
+                    ctx.drawImage(img, 0, 0, b, h);
+                    const d = ctx.getImageData(0, 0, b, h).data;
+                    let summe = 0, anzahl = 0;
+                    for (let i = 0; i < d.length; i += 4) {
+                        if (d[i + 3] < 40) continue;
+                        summe += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+                        anzahl++;
+                    }
+                    // Nur bei durchsichtigem Grund: ein Logo mit eigener weisser
+                    // Flaeche ist auf Weiss lesbar und braucht keine Unterlage.
+                    const durchsichtig = anzahl < (d.length / 4) * 0.92;
+                    if (durchsichtig && anzahl > 0 && summe / anzahl > 0.86) {
+                        huelle.classList.add('cps-logo-bild--dunkel');
+                    }
+                } catch (e) { /* fremder Host ohne CORS: nicht messbar */ }
+            };
+            img.addEventListener('error', zurueck);
+            if (img.complete) pruefeHelligkeit(); else img.addEventListener('load', pruefeHelligkeit);
+        }
+
         renderSettingsHTML() {
             const privacyUrl = sanitizeUrl(this.config.privacyPolicyUrl || '/datenschutz');
             const imprintUrl = sanitizeUrl(this.config.imprintUrl || '/impressum');
@@ -3212,7 +3336,7 @@
                 <!-- Header -->
                 <div class="cps-header">
                     <div class="cps-header-left">
-                        <div class="cps-logo">C</div>
+                        ${this.logoHTML()}
                         <h2 class="cps-title" id="complyo-settings-title">${sanitizeText(this.config.texts?.title || 'Privatsphäre-Einstellungen')}</h2>
                     </div>
                     <div class="cps-header-links">
