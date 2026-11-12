@@ -3300,7 +3300,10 @@
                 if (huelle.parentNode) huelle.parentNode.replaceChild(kreis, huelle);
             };
             const pruefeHelligkeit = () => {
-                if (!img.naturalWidth || !img.naturalHeight) { zurueck(); return; }
+                // Ohne Masse ist nichts zu messen. Kein Rueckfall an dieser Stelle:
+                // ein SVG ohne width/height meldet in manchen Browsern 0 und ist
+                // trotzdem ein gueltiges Logo. Tote Adressen meldet das error-Ereignis.
+                if (!img.naturalWidth || !img.naturalHeight) return;
                 if (huelle.classList.contains('cps-logo-bild--dunkel')) return;
                 try {
                     const b = Math.min(64, img.naturalWidth);
@@ -3325,7 +3328,14 @@
                 } catch (e) { /* fremder Host ohne CORS: nicht messbar */ }
             };
             img.addEventListener('error', zurueck);
-            if (img.complete) pruefeHelligkeit(); else img.addEventListener('load', pruefeHelligkeit);
+            if (img.complete) {
+                // Schon fertig und ohne Masse: bei Rasterbildern ist das eine tote
+                // Adresse, deren error-Ereignis vor dem Anbinden kam.
+                if (!img.naturalWidth && !/\.svg([?#]|$)/i.test(img.getAttribute('src') || '')) zurueck();
+                else pruefeHelligkeit();
+            } else {
+                img.addEventListener('load', pruefeHelligkeit);
+            }
         }
 
         renderSettingsHTML() {

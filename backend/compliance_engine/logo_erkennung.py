@@ -84,7 +84,14 @@ LOGO_JS = """
     const r = img.getBoundingClientRect();
     const oben = r.top + (window.scrollY || 0);
     if (oben > 420 || !sichtbar(img, r)) continue;
-    const src = img.currentSrc || img.src || '';
+    let src = img.currentSrc || img.src || '';
+    // Verzoegert geladene Bilder (Avada, WP Rocket, lazysizes) tragen bis zum
+    // Nachladen einen data:-Platzhalter; die echte Adresse steht im Datenattribut.
+    if (!src || /^data:/i.test(src)) {
+      const ersatz = img.getAttribute('data-orig-src') || img.getAttribute('data-src') || img.getAttribute('data-lazy-src') ||
+        ((img.getAttribute('data-srcset') || img.getAttribute('srcset') || '').trim().split(/[\s,]+/)[0] || '');
+      if (ersatz && !/^data:/i.test(ersatz)) { try { src = new URL(ersatz, location.href).href; } catch (e) {} }
+    }
     if (!src) continue;
     const kennung = [img.className && String(img.className), img.id, img.alt, src,
       img.parentElement && String(img.parentElement.className), img.parentElement && img.parentElement.id].join(' ');

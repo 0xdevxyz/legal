@@ -70,6 +70,11 @@ SEITEN = {
     # Logo steckt in einem fremden Einwilligungsfenster: zaehlt nicht.
     "consent": ('', '<div id="cookie-banner"><img class="logo" src="/logo-dunkel.png" alt="logo" width="160" height="40"></div>'
                     '<p>Inhalt</p>'),
+    # Verzoegert geladenes Logo (Avada): src ist ein Platzhalter, die Adresse steht im Datenattribut.
+    # Gemessen 12.11.2026 an ferienpark-waldenburg.de: ohne diesen Fall fand der Scan dort kein Logo.
+    "lazy": ('', '<header><a href="/"><img class="fusion-standard-logo lazyload" width="160" height="40" alt="Kunde" '
+                 'src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNjAiIGhlaWdodD0iNDAiLz4=" '
+                 'data-orig-src="/logo-dunkel.png"></a></header><p>Inhalt</p>'),
     "leer": ('', '<p>nichts</p>'),
 }
 
@@ -285,6 +290,11 @@ class TestErkennung:
     def test_logo_eines_fremden_einwilligungsfensters_zaehlt_nicht(self, umgebung):
         e, kandidaten = _erkenne(umgebung, "consent")
         assert kandidaten["bilder"] == [] and e is None
+
+    def test_verzoegert_geladenes_logo_wird_ueber_das_datenattribut_gefunden(self, umgebung):
+        basis, _ = umgebung
+        e, _ = _erkenne(umgebung, "lazy")
+        assert e is not None and e["url"] == f"{basis}/logo-dunkel.png"
 
     def test_seite_ohne_alles_hat_kein_logo(self, umgebung):
         e, _ = _erkenne(umgebung, "leer")
