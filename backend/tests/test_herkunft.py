@@ -192,11 +192,15 @@ def test_insert_spalten_stehen_in_der_migration():
 
 
 def test_migration_haengt_an_der_richtigen_revision():
-    """Genau ein Kopf, und er ist 0037. Zwei Koepfe laessen `alembic upgrade head` scheitern."""
+    """Genau ein Kopf, und 0037_kanal_herkunft liegt in seiner Kette. Zwei Koepfe laessen
+    `alembic upgrade head` scheitern."""
     pytest.importorskip("alembic")
     from alembic.script import ScriptDirectory
     skripte = ScriptDirectory(os.path.join(BACKEND, "alembic"))
-    assert skripte.get_heads() == ["0037_kanal_herkunft"], skripte.get_heads()
+    koepfe = skripte.get_heads()
+    assert len(koepfe) == 1, koepfe
+    kette = {r.revision for r in skripte.walk_revisions(base="base", head=koepfe[0])}
+    assert "0037_kanal_herkunft" in kette, kette
 
 
 # ---------------------------------------------------------------------------

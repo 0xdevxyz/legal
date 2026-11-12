@@ -226,7 +226,8 @@ async def markenfarben_aus_seite(page, ausgeschlossen=frozenset()) -> Optional[D
 
 
 async def markenfarben_gerendert(url: str, timeout_s: float = 20.0,
-                                 logo_ziel: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+                                 logo_ziel: Optional[Dict[str, Any]] = None,
+                                 stil_ziel: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """
     Seite im Browser laden und die sichtbaren Markenfarben lesen.
 
@@ -234,6 +235,9 @@ async def markenfarben_gerendert(url: str, timeout_s: float = 20.0,
     erkannte Logo der Website ab (compliance_engine/logo_erkennung.py), auch wenn
     keine Markenfarbe gefunden wird. Ein zweiter Seitenaufruf nur fuer das Logo
     waere ein zweiter Browser.
+
+    stil_ziel: ebenso fuer Schrift und Ecken der Website
+    (compliance_engine/marken_stil.py): Schluessel 'schrift' und 'radius'.
 
     None, wenn Playwright fehlt, die Seite nicht laedt oder nichts Buntes
     sichtbar ist; der Aufrufer faellt dann auf den Quelltext-Extraktor zurueck.
@@ -278,6 +282,11 @@ async def markenfarben_gerendert(url: str, timeout_s: float = 20.0,
                     logo = await logo_aus_seite(page, page.url or url)
                     if logo:
                         logo_ziel.update(logo)
+                if stil_ziel is not None:
+                    from compliance_engine.marken_stil import stil_aus_seite
+                    stil = await stil_aus_seite(page)
+                    if stil:
+                        stil_ziel.update(stil)
                 return await markenfarben_aus_seite(page, PLATTFORM_STANDARDFARBEN)
             finally:
                 await browser.close()

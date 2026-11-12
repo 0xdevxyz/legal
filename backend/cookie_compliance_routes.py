@@ -93,6 +93,62 @@ async def _speichere_banner_erzwingen(pool, site_id: str, wert) -> None:
         logger.warning("[Banner] banner_erzwingen nicht gespeichert: %s", e)
 
 
+async def _markenstil_felder(pool, config: dict) -> None:
+    """Ergaenzt die Konfiguration um `marken_schrift` und `marken_radius` (Schrift und
+    Ecken der Website, vom Scan gemessen).
+
+    Wie `banner_erzwingen` GETRENNT vom grossen SELECT gelesen: fehlt die Spalte
+    (Backend vor der Migration 0038 ausgerollt), bekommt jede Website ihre
+    Konfiguration ohne diese Felder statt eines 500. Der Banner bleibt dann bei
+    Standardschrift und Standardecken.
+    """
+    site_id = config.get("site_id")
+    if not site_id:
+        return
+    try:
+        row = await pool.fetchrow(
+            "SELECT marken_schrift, marken_radius FROM cookie_banner_configs WHERE site_id = $1",
+            site_id)
+    except Exception as e:
+        logger.warning("[Banner] Schrift und Ecken fuer %s nicht lesbar: %s", site_id, e)
+        return
+    if not row:
+        return
+    from compliance_engine.marken_stil import bereinige_schrift
+    # Noch einmal bereinigen: was in der Datenbank steht, geht in ein <style>.
+    schrift = bereinige_schrift(row["marken_schrift"])
+    radius = row["marken_radius"]
+    if schrift:
+        config["marken_schrift"] = schrift
+    if isinstance(radius, int) and 0 <= radius <= 24 or radius == 100:
+        config["marken_radius"] = int(radius)
+
+
+async def _speichere_markenstil(pool, site_id: str, stil: Optional[dict]) -> bool:
+    """Gemessene Schrift und Ecken der Website ablegen.
+
+    Es gibt keine Oberflaeche, in der ein Kunde sie von Hand setzt; ein neuer
+    Scan darf sie deshalb erneuern. Was nicht gemessen wurde (None), bleibt wie es
+    war. Jeder Fehler (etwa fehlende Spalte) heisst nur: nicht gespeichert, der
+    Scan laeuft weiter.
+    """
+    if not stil or not site_id:
+        return False
+    schrift, radius = stil.get("schrift"), stil.get("radius")
+    if schrift is None and radius is None:
+        return False
+    try:
+        res = await pool.execute(
+            "UPDATE cookie_banner_configs SET "
+            "marken_schrift = COALESCE($2, marken_schrift), "
+            "marken_radius = COALESCE($3, marken_radius) WHERE site_id = $1",
+            site_id, schrift, radius)
+        return bool(res) and res != "UPDATE 0"
+    except Exception as e:
+        logger.warning("[Scan] Schrift und Ecken fuer %s nicht gespeichert: %s", site_id, e)
+        return False
+
+
 async def _speichere_logo(pool, site_id: str, logo: Optional[dict]) -> bool:
     """Erkanntes Logo der Website in custom_logo_url ablegen.
 
@@ -1051,6 +1107,7 @@ async def get_my_config(
 
         # Das Dashboard zeigt den Schalter "Banner immer anzeigen" mit dem Ist-Wert.
         await _banner_auto_aus_felder(db_pool, config)
+        await _markenstil_felder(db_pool, config)
 
         # Convert datetime to ISO string
         for field in ['scan_completed_at', 'created_at', 'updated_at']:
@@ -1203,6 +1260,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
 
         # Darf das Widget den Banner weglassen, wenn die Seite selbst nichts zeigt?
         await _banner_auto_aus_felder(db_pool, config)
+        await _markenstil_felder(db_pool, config)
 
         # "Über Cookies"-Link: Wenn der Kunde keine eigene Cookie-Richtlinie-URL
         # gesetzt hat, auf die von Complyo gehostete öffentliche Seite zeigen.
@@ -2407,11 +2465,12 @@ async def scan_website(
         # Derselbe Durchlauf liest das Logo der Website (logo_erkennung.py): es
         # steht im Einstellungsfenster des Banners an der Stelle des Absenders.
         logo: Dict[str, Any] = {}
+        stil: Dict[str, Any] = {}
         try:
             from compliance_engine.markenfarben_gerendert import markenfarben_gerendert
             gerendert = await markenfarben_gerendert(
                 url if url.startswith('http') else f'https://{url}', timeout_s=20.0,
-                logo_ziel=logo,
+                logo_ziel=logo, stil_ziel=stil,
             )
             if gerendert and gerendert.get('scraped'):
                 scan_result['brand_colors'] = gerendert
@@ -2472,6 +2531,9 @@ async def scan_website(
         logo_gespeichert = False
         if config_updated and logo.get("gespeichert"):
             logo_gespeichert = await _speichere_logo(db_pool, site_id, logo)
+        stil_gespeichert = False
+        if config_updated and stil:
+            stil_gespeichert = await _speichere_markenstil(db_pool, site_id, stil)
 
         # Drittlandtransfer-Findings (abmahnfähig, KEIN Cookie-Problem) durchreichen.
         # Diese erscheinen unabhängig davon, ob Banner-Cookies gefunden wurden —
@@ -2525,6 +2587,8 @@ async def scan_website(
             "logo": ({"url": logo.get("url"), "quelle": logo.get("quelle"), "grund": logo.get("grund")}
                      if logo.get("url") else None),
             "logo_gespeichert": logo_gespeichert,
+            "stil": ({"schrift": stil.get("schrift"), "radius": stil.get("radius")} if stil else None),
+            "stil_gespeichert": stil_gespeichert,
             "privacy_findings_count": len(privacy_findings),
             "config_updated": config_updated,
             # gespeichert | ohne_anmeldung | fremde_website (siehe scan_schreibziel)

@@ -24,7 +24,7 @@
     // Configuration & Constants
     // ========================================================================
     
-    const VERSION = '2.2.0';
+    const VERSION = '2.3.0';
     const API_BASE = 'https://api.complyo.de';
     const CONSENT_STORAGE_KEY = 'complyo_cookie_consent';
     const CONSENT_DATE_KEY = 'complyo_consent_date';
@@ -790,6 +790,10 @@
             this.config.textColor = serverConfig.text_color || this.config.textColor;
             this.config.bgColor = serverConfig.bg_color || this.config.bgColor;
             this.config.buttonStyle = serverConfig.button_style || this.config.buttonStyle;
+            // Schrift und Ecken der Website (vom Scan gemessen). Fehlen sie, bleibt der
+            // Banner bei Standardschrift und Standardecken.
+            this.config.markenSchrift = typeof serverConfig.marken_schrift === 'string' ? serverConfig.marken_schrift : '';
+            this.config.markenRadius = typeof serverConfig.marken_radius === 'number' ? serverConfig.marken_radius : null;
             this.config.position = serverConfig.position || this.config.position;
             this.config.widthMode = serverConfig.width_mode || this.config.widthMode;
             this.config.showBranding = serverConfig.show_branding !== false;
@@ -929,8 +933,21 @@
                 const accent = farbe(this.config.accentColor, DEFAULT_CONFIG.accentColor);
                 const text = farbe(this.config.textColor, DEFAULT_CONFIG.textColor);
                 const bg = farbe(this.config.bgColor, DEFAULT_CONFIG.bgColor);
+                // Eine ausdrueckliche Wahl (Pille, eckig) gewinnt. Nur beim Standard
+                // "rounded" gelten die Ecken der Website: 100 = Pille, sonst Pixel.
+                const mr = this.config.markenRadius;
+                const markenOk = this.config.buttonStyle !== 'pill' && this.config.buttonStyle !== 'square'
+                    && typeof mr === 'number' && isFinite(mr) && (mr === 100 || (mr >= 0 && mr <= 24));
                 const radius = this.config.buttonStyle === 'pill' ? '100px'
-                    : this.config.buttonStyle === 'square' ? '6px' : '10px';
+                    : this.config.buttonStyle === 'square' ? '6px'
+                    : markenOk ? (mr === 100 ? '100px' : Math.round(mr) + 'px') : '10px';
+                const karte = markenOk ? (mr === 100 ? 16 : (mr === 0 ? 0 : Math.min(Math.max(Math.round(mr), 4), 20))) : 12;
+                // Die Schrift landet in einem <style>: nur Namen aus Buchstaben, Ziffern,
+                // Leerzeichen, Bindestrich, Anfuehrungszeichen und Komma. Alles andere
+                // verwirft das Widget, egal was der Server schickt.
+                const ms = this.config.markenSchrift;
+                const schriftOk = typeof ms === 'string' && ms.length > 0 && ms.length <= 200
+                    && /^[A-Za-z0-9 ,"'_-]+$/.test(ms);
                 const tokens = {
                     '--complyo-primary': primary,
                     '--complyo-on-primary': K.lesbareSchrift(primary),
@@ -941,8 +958,9 @@
                     '--complyo-muted': K.gedaempfteSchrift(text, bg),
                     '--complyo-link': K.lesbareMarkenschrift(primary, bg),
                     '--complyo-radius-btn': radius,
-                    '--complyo-radius-card': '12px',
-                    '--complyo-font': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+                    '--complyo-radius-card': karte + 'px',
+                    '--complyo-font': schriftOk ? ms
+                        : '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
                 };
                 const css = ':root{' + Object.keys(tokens)
                     .map(k => k + ':' + tokens[k]).join(';') + '}';
@@ -1800,7 +1818,7 @@
             return `
                 /* Complyo Cookie Banner Styles v${VERSION} - Modern Edition */
                 .complyo-cookie-banner {
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    font-family: var(--complyo-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
                     font-size: 14px;
                     line-height: 1.45;
                     box-sizing: border-box;
@@ -1886,7 +1904,7 @@
                     transform: translate(-50%, -50%) scale(0.95);
                     background: ${bgColor};
                     color: ${textColor};
-                    border-radius: 12px;
+                    border-radius: var(--complyo-radius-card, 12px);
                     padding: 28px 32px;
                     max-width: 760px;
                     width: 92%;
@@ -2024,7 +2042,7 @@
                 }
                 
                 .complyo-btn-rounded {
-                    border-radius: 10px;
+                    border-radius: var(--complyo-radius-btn, 10px);
                 }
                 
                 .complyo-btn-square {
@@ -2809,7 +2827,7 @@
                     z-index: 2147483647;
                     opacity: 0;
                     transition: all 0.3s ease;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    font-family: var(--complyo-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
                     box-shadow: 0 10px 40px rgba(0,0,0,0.2);
                     border: 1px solid #e5e7eb;
                 }
