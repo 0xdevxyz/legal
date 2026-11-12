@@ -69,7 +69,16 @@ PROBEN_JS = """
     if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) return null;
     return { r, cs };
   };
-  const imConsent = (el) => { try { return !!el.closest(consentSelektor); } catch (e) { return false; } };
+  // html und body sind nie ein Einwilligungsfenster. Themes wie Avada schreiben die
+  // Browserkennung als Klasse auf <html> (bei unserem Scanner: ua-complyo-scanner);
+  // ohne diese Ausnahme galt dann die ganze Seite als unser eigener Banner und die
+  // Erkennung sah nichts (gemessen 12.11.2026, ferienpark-waldenburg.de).
+  const imConsent = (el) => {
+    try {
+      const c = el.closest(consentSelektor);
+      return !!c && c !== document.documentElement && c !== document.body;
+    } catch (e) { return false; }
+  };
   const melde = (rolle, farbe, el, flaeche) => {
     if (!farbe || farbe === 'transparent' || farbe === 'rgba(0, 0, 0, 0)') return;
     proben.push({ rolle, farbe, flaeche: flaeche || 0, tag: el.tagName.toLowerCase() });

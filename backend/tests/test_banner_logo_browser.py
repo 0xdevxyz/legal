@@ -78,6 +78,15 @@ SEITEN = {
     "leer": ('', '<p>nichts</p>'),
 }
 
+# Avada schreibt die Browserkennung als Klasse auf <html>. Beim Scanner (User-Agent
+# "... Complyo-Scanner/2.0") steht dort "ua-complyo-scanner", und der Consent-Selektor
+# ([class*="complyo"]) traf damit die ganze Seite.
+SEITEN["avada"] = ('<script>document.documentElement.className += " ua-complyo-scanner ua-complyo-scanner-2";</script>',
+                   '<header style="background:#fff;padding:12px"><a href="/"><img class="fusion-standard-logo" '
+                   'src="/logo-dunkel.png" alt="Kunde" width="160" height="40"></a></header>'
+                   '<main><a href="/kontakt" class="knopf" style="display:inline-block;background:#c2410c;color:#fff;'
+                   'padding:14px 28px;border-radius:6px">Anfragen</a><h1 style="color:#c2410c">Ferienpark</h1></main>')
+
 KOPF = """<!doctype html><html lang="de"><head><meta charset="utf-8"><title>{n}</title>{kopf}
 <script src="/bundle.js" data-site-id="test-de"></script></head><body>{koerper}</body></html>"""
 
@@ -295,6 +304,25 @@ class TestErkennung:
         basis, _ = umgebung
         e, _ = _erkenne(umgebung, "lazy")
         assert e is not None and e["url"] == f"{basis}/logo-dunkel.png"
+
+    def test_browserkennung_als_klasse_auf_html_blendet_die_seite_nicht_aus(self, umgebung):
+        basis, _ = umgebung
+        e, kandidaten = _erkenne(umgebung, "avada")
+        assert e is not None and e["url"] == f"{basis}/logo-dunkel.png", (
+            f"Die ganze Seite gilt als Einwilligungsfenster: {len(kandidaten['bilder'])} Bilder gesehen."
+        )
+
+    def test_farberkennung_hat_dieselbe_ausnahme(self, umgebung):
+        """Derselbe Fehler machte die gerenderte Farberkennung auf jeder Avada-Seite blind."""
+        from compliance_engine.markenfarben_gerendert import CONSENT_SELEKTOR, PROBEN_JS, bewerte_farbproben
+        page, ctx, _ = _seite(umgebung, "avada")
+        try:
+            proben = page.evaluate(PROBEN_JS, CONSENT_SELEKTOR)
+            assert proben, "Die Farberkennung sieht auf der Seite keine einzige Probe."
+            farben = bewerte_farbproben(proben)
+            assert farben and farben["primary_color"].lower() == "#c2410c", farben
+        finally:
+            ctx.close()
 
     def test_seite_ohne_alles_hat_kein_logo(self, umgebung):
         e, _ = _erkenne(umgebung, "leer")
