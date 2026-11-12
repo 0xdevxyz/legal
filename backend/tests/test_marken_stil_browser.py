@@ -28,28 +28,28 @@ LANG = "Das ist ein langer Absatz mit genug Text, damit er als Fliesstext der Se
 SEITEN = {
     # Serifenschrift, eckige Knoepfe.
     "serife": ('<style>body{font-family:Georgia,"Times New Roman",serif}'
-               '.k{display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:0;border:0}</style>',
-               f'<main><p>{LANG}</p><a class="k" href="/a">Anfragen</a><a class="k" href="/b">Termin</a></main>'),
+               '.btn{display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:0;border:0}</style>',
+               f'<main><p>{LANG}</p><a class="btn" href="/a">Anfragen</a><a class="btn" href="/b">Termin</a></main>'),
     # Pillenknoepfe, serifenlose Webschrift mit Namen aus zwei Woertern.
     "pille": ('<style>body{font-family:"Open Sans",Arial,sans-serif}'
-              '.k{display:inline-block;background:#c2410c;color:#fff;padding:12px 28px;border-radius:999px;border:0}</style>',
-              f'<main><p>{LANG}</p><a class="k" href="/a">Anfragen</a></main>'),
+              '.btn{display:inline-block;background:#c2410c;color:#fff;padding:12px 28px;border-radius:999px;border:0}</style>',
+              f'<main><p>{LANG}</p><a class="btn" href="/a">Anfragen</a></main>'),
     # Ein fremdes Einwilligungsfenster mit eigenen Pillenknoepfen zaehlt nicht.
     "consent": ('<style>body{font-family:Georgia,serif}'
-                '.k{display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;border:0}'
-                '.c{display:inline-block;background:#111;color:#fff;padding:12px 24px;border-radius:999px;border:0}</style>',
-                f'<main><p>{LANG}</p><a class="k" href="/a">Anfragen</a></main>'
-                '<div id="cookie-banner"><a class="c" href="#">Alle akzeptieren</a><a class="c" href="#">Ablehnen</a>'
-                '<a class="c" href="#">Einstellungen</a></div>'),
+                '.btn{display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;border:0}'
+                '.c.btn{display:inline-block;background:#111;color:#fff;padding:12px 24px;border-radius:999px;border:0}</style>',
+                f'<main><p>{LANG}</p><a class="btn" href="/a">Anfragen</a></main>'
+                '<div id="cookie-banner"><a class="btn c" href="#">Alle akzeptieren</a><a class="btn c" href="#">Ablehnen</a>'
+                '<a class="btn c" href="#">Einstellungen</a></div>'),
     # Browserkennung als Klasse auf <html> (Avada): darf die Messung nicht ausblenden.
     "avada": ('<script>document.documentElement.className += " ua-complyo-scanner";</script>'
               '<style>body{font-family:Georgia,serif}'
-              '.k{display:inline-block;background:#c2410c;color:#fff;padding:12px 24px;border-radius:6px;border:0}</style>',
-              f'<main><p>{LANG}</p><a class="k" href="/a">Anfragen</a></main>'),
+              '.btn{display:inline-block;background:#c2410c;color:#fff;padding:12px 24px;border-radius:6px;border:0}</style>',
+              f'<main><p>{LANG}</p><a class="btn" href="/a">Anfragen</a></main>'),
     # Symbolschrift auf dem Fliesstext (fehlerhaft vererbt): nie als Textschrift.
-    "symbol": ('<style>body{font-family:"Font Awesome 6 Free"}.k{display:inline-block;background:#1d4ed8;color:#fff;'
+    "symbol": ('<style>body{font-family:"Font Awesome 6 Free"}.btn{display:inline-block;background:#1d4ed8;color:#fff;'
                'padding:12px 24px;border-radius:4px;border:0}</style>',
-               f'<main><p>{LANG}</p><a class="k" href="/a">Anfragen</a></main>'),
+               f'<main><p>{LANG}</p><a class="btn" href="/a">Anfragen</a></main>'),
     # Keine Knoepfe, keine Fliesstexte.
     "leer": ('', '<h1>Hallo</h1>'),
     "banner": ('', '<p>Inhalt</p>'),

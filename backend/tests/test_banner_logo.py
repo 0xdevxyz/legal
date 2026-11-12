@@ -193,7 +193,7 @@ def _scan_client(monkeypatch, *, angemeldet, logo):
         "privacy_findings": [], "detected_cms": None})
     monkeypatch.setattr(modul, "cookie_scanner", scanner)
 
-    async def gerendert(url, timeout_s=20.0, logo_ziel=None):
+    async def gerendert(url, timeout_s=20.0, logo_ziel=None, stil_ziel=None):
         if logo_ziel is not None and logo:
             logo_ziel.update(logo)
         return None
