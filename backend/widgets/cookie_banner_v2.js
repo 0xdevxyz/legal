@@ -796,6 +796,10 @@
             // Logo der Website (vom Scan erkannt oder im Dashboard gesetzt). Es
             // steht im Einstellungsfenster dort, wo frueher ein festes "C" stand.
             this.config.logoUrl = typeof serverConfig.custom_logo_url === 'string' ? serverConfig.custom_logo_url : '';
+            // Wer das Einstellungsfenster oeffnet, bevor diese Antwort da ist
+            // (Link im Fuss der Seite, sofort geklickt), sah sonst dauerhaft
+            // den Buchstaben statt des Logos.
+            this.aktualisiereLogo();
             this.config.services = serverConfig.services || [];
             this.config.isActiveFromServer = serverConfig.is_active === true;
             // 🔒 Lizenzstatus vom Server (false = Website im Dashboard entfernt)
@@ -3277,6 +3281,19 @@
             const dunkel = roh.indexOf('#complyo-auto-dunkel') !== -1;
             return `<span class="cps-logo-bild${dunkel ? ' cps-logo-bild--dunkel' : ''}" data-buchstabe="${buchstabe}">` +
                    `<img src="${url}" alt="" decoding="async" /></span>`;
+        }
+
+        /** Logo in einem schon offenen Einstellungsfenster nachziehen. */
+        aktualisiereLogo() {
+            try {
+                const kopf = document.querySelector('#complyo-settings-modal .cps-header-left');
+                const alt = kopf ? kopf.querySelector('.cps-logo, .cps-logo-bild') : null;
+                if (!alt) return;
+                const neu = document.createElement('template');
+                neu.innerHTML = this.logoHTML();
+                alt.parentNode.replaceChild(neu.content, alt);
+                this.bindeLogo(kopf);
+            } catch (e) { /* das Logo darf den Banner nie stoeren */ }
         }
 
         /**

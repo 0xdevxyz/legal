@@ -134,7 +134,7 @@ def umgebung():
     srv.shutdown()
 
 
-def _seite(umgebung, name, logo=None, breite=1280):
+def _seite(umgebung, name, logo=None, breite=1280, verzug_ms=0):
     basis, browser = umgebung
     ctx = browser.new_context(viewport={"width": breite, "height": 900})
     page = ctx.new_page()
@@ -148,6 +148,8 @@ def _seite(umgebung, name, logo=None, breite=1280):
             daten = {"site_id": "test-de", "layout": "box_modal", "is_active": True, "services": [],
                      "license_active": True, "scan_completed": True, "revision": 1,
                      "primary_color": "#3c7f1a", "accent_color": "#336c16", "custom_logo_url": logo}
+            if verzug_ms:
+                page.wait_for_timeout(verzug_ms)
             return route.fulfill(status=200, content_type="application/json",
                                  body=json.dumps({"success": True, "data": daten}))
         if "api.complyo.de/api/cookie-compliance/services" in u:
@@ -248,6 +250,28 @@ class TestAnzeige:
         try:
             z = _fenster(page)
             assert not z["bild"] and z["kreis"] == "1"
+            assert fehler == [], fehler
+        finally:
+            ctx.close()
+
+    def test_fenster_vor_der_serverantwort_geoeffnet_bekommt_das_logo_nachgereicht(self, umgebung):
+        """Live gemessen am 12.11.2026: sofort nach dem Laden geoeffnet, zeigten alle
+        Seiten den Buchstaben, weil die Konfiguration noch unterwegs war."""
+        basis, _ = umgebung
+        page, ctx, fehler = _seite(umgebung, "leer", logo=f"{basis}/logo-dunkel.png#complyo-auto", verzug_ms=1500)
+        try:
+            page.evaluate("() => window.complyo.openPreferences()")
+            page.wait_for_selector("#complyo-settings-modal .cps-header", timeout=5000)
+            sofort = page.evaluate("() => !!document.querySelector('#complyo-settings-modal .cps-header-left img')")
+            page.wait_for_selector("#complyo-settings-modal .cps-header-left img", timeout=6000)
+            page.wait_for_timeout(400)
+            danach = page.evaluate("""() => {
+              const k = document.querySelector('#complyo-settings-modal .cps-header-left');
+              return { bilder: k.querySelectorAll('img').length, kreise: k.querySelectorAll('.cps-logo').length,
+                       titel: k.querySelectorAll('.cps-title').length };
+            }""")
+            assert sofort is False, "Die Attrappe hat nicht verzoegert: der Test prueft nichts."
+            assert danach == {"bilder": 1, "kreise": 0, "titel": 1}
             assert fehler == [], fehler
         finally:
             ctx.close()
