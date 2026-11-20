@@ -385,9 +385,15 @@ def test_neue_konfiguration_startet_mit_markenfarben(monkeypatch):
     assert daten["farben_quelle"] == "website"
     assert daten["farben_gespeichert"] is True
     assert daten["farben"]["primary_color"] == "#1d4ed8"
-    sql, *args = pool.execute.await_args.args
+    # Nach dem INSERT folgt das Kennzeichen "folgt der Website" (farben_automatisch):
+    # der INSERT ist deshalb nicht mehr der letzte Schreibvorgang.
+    inserts = [c.args for c in pool.execute.await_args_list if "INSERT INTO cookie_banner_configs" in c.args[0]]
+    assert len(inserts) == 1
+    sql, *args = inserts[0]
     assert "primary_color, accent_color, text_color, bg_color" in sql
     assert args[-4:] == ["#1d4ed8", "#1e40af", "#111827", "#ffffff"]
+    kennzeichen = [c.args for c in pool.execute.await_args_list if "farben_automatisch" in c.args[0]]
+    assert kennzeichen and kennzeichen[-1][2] is True   # vom Scan angelegt: folgt der Website
 
 
 def test_bestehende_konfiguration_behaelt_ihre_farben(monkeypatch):
