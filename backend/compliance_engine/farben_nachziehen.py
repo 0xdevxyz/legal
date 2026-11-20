@@ -44,6 +44,13 @@ def _abstand(a: str, b: str) -> int:
 def vorschlag_aus_scan(gerendert: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
     """Die vier Bannerfarben aus dem Ergebnis der Erkennung, oder None.
 
+    Haupt- und Akzentfarbe so, wie die Website sie zeigt: NICHT abgedunkelt. Der Banner
+    waehlt die Schrift auf dem Knopf selbst (lesbareSchrift) und die Markenfarbe als
+    Schrift selbst (lesbareMarkenschrift); ein Abdunkeln im Backend ist doppelt und
+    verfaelscht die Marke (rru-chemnitz: Gelb #f0dc00 wuerde Olive #7e7401, am 20.11.2026
+    im Trockenlauf gemessen; Daniels bestehende Konfigurationen tragen die rohen Farben).
+    Text und Grund kommen aus farbvorschlag(), das sie auf Lesbarkeit gegeneinander prueft.
+
     None, wenn die Seite keine eigenen Farben hergab: dann bleibt es, wie es ist,
     statt auf die Standardfarben zurueckzufallen.
     """
@@ -52,7 +59,15 @@ def vorschlag_aus_scan(gerendert: Optional[Dict[str, Any]]) -> Optional[Dict[str
     v = farbvorschlag(gerendert)
     if v.get("quelle") != "website":
         return None
-    return {f: str(v["farben"][f]).lower() for f in FELDER}
+    farben = {f: str(v["farben"][f]).lower() for f in FELDER}
+    for f in ("primary_color", "accent_color"):
+        roh = str(gerendert.get(f) or "").strip().lower()
+        try:
+            _hex_zu_rgb(roh)
+        except ValueError:
+            continue
+        farben[f] = roh if roh.startswith("#") else "#" + roh
+    return farben
 
 
 def abweichende_felder(alt: Dict[str, Any], neu: Dict[str, str]) -> List[str]:

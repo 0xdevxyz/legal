@@ -2575,7 +2575,10 @@ async def scan_website(
                 # Erstelle neue Config mit gefundenen Services (inkl. user_id,
                 # damit /my-config sie zuverlässig findet).
                 if farben['quelle'] == 'website':
-                    f = farben['farben']
+                    # Dieselben Farben wie beim Nachziehen (nicht abgedunkelt), sonst
+                    # wuerde die Konfiguration beim ersten Nachziehen springen.
+                    from compliance_engine.farben_nachziehen import vorschlag_aus_scan as _roh
+                    f = _roh(scan_result.get('brand_colors')) or farben['farben']
                     res = await db_pool.execute("""
                         INSERT INTO cookie_banner_configs (
                             site_id, user_id, services, scan_completed_at, last_scan_url, is_active,

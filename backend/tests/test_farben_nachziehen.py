@@ -78,6 +78,17 @@ class TestVorschlag:
         assert set(v) == set(FELDER)
         assert v["primary_color"] == "#4b5563"
 
+    def test_marke_wird_nicht_abgedunkelt(self):
+        # Trockenlauf 20.11.2026: farbvorschlag() machte aus rru-chemnitz' Gelb #f0dc00 ein
+        # Olive #7e7401 (Abdunkeln fuer weisse Schrift). Der Banner waehlt die Schrift selbst.
+        v = vorschlag_aus_scan({**GERENDERT, "primary_color": "#f0dc00", "accent_color": "#22c55e"})
+        assert v["primary_color"] == "#f0dc00" and v["accent_color"] == "#22c55e"
+
+    def test_unlesbarer_text_wird_trotzdem_korrigiert(self):
+        # Text und Grund prueft farbvorschlag() weiter gegeneinander.
+        v = vorschlag_aus_scan({**GERENDERT, "text_color": "#cccccc", "bg_color": "#ffffff"})
+        assert v["text_color"] != "#cccccc"
+
     def test_nichts_erkannt_heisst_kein_vorschlag(self):
         assert vorschlag_aus_scan(None) is None
         assert vorschlag_aus_scan({"scraped": False}) is None
