@@ -124,6 +124,26 @@ async def _markenstil_felder(pool, config: dict) -> None:
         config["marken_radius"] = int(radius)
 
 
+async def _farben_auto_feld(pool, config: dict) -> None:
+    """Ergaenzt die Konfiguration um `farben_automatisch` (folgen die Farben der Website?).
+
+    GETRENNT vom grossen SELECT gelesen, wie `banner_erzwingen`: fehlt die Spalte
+    (Backend vor der Migration 0039 ausgerollt), bekommt jede Website ihre
+    Konfiguration ohne dieses Feld statt eines 500.
+    """
+    site_id = config.get("site_id")
+    if not site_id:
+        return
+    try:
+        wert = await pool.fetchval(
+            "SELECT farben_automatisch FROM cookie_banner_configs WHERE site_id = $1", site_id)
+    except Exception as e:
+        logger.warning("[Banner] farben_automatisch fuer %s nicht lesbar: %s", site_id, e)
+        return
+    if wert is not None:
+        config["farben_automatisch"] = bool(wert)
+
+
 async def _speichere_markenstil(pool, site_id: str, stil: Optional[dict]) -> bool:
     """Gemessene Schrift und Ecken der Website ablegen.
 
@@ -556,6 +576,9 @@ class BannerConfig(BaseModel):
     # None = Dashboard kennt das Feld nicht oder hat es nicht angefasst: der
     # gespeicherte Wert bleibt (siehe _speichere_banner_erzwingen).
     banner_erzwingen: Optional[bool] = None
+    # None = nicht mitgeschickt: das Kennzeichen bleibt, ausser der Designer
+    # speichert andere Farben (dann faellt es, siehe save_config).
+    farben_automatisch: Optional[bool] = None
 
     class Config:
         extra = "allow"
@@ -579,6 +602,7 @@ class BannerConfigUpdate(BaseModel):
     show_branding: Optional[bool] = None
     custom_logo_url: Optional[str] = None
     banner_erzwingen: Optional[bool] = None
+    farben_automatisch: Optional[bool] = None
 
 class ServiceTemplate(BaseModel):
     service_key: str
@@ -1108,6 +1132,7 @@ async def get_my_config(
         # Das Dashboard zeigt den Schalter "Banner immer anzeigen" mit dem Ist-Wert.
         await _banner_auto_aus_felder(db_pool, config)
         await _markenstil_felder(db_pool, config)
+        await _farben_auto_feld(db_pool, config)
 
         # Convert datetime to ISO string
         for field in ['scan_completed_at', 'created_at', 'updated_at']:
@@ -1261,6 +1286,7 @@ Einige Services verarbeiten personenbezogene Daten in den USA. Mit Ihrer Einwill
         # Darf das Widget den Banner weglassen, wenn die Seite selbst nichts zeigt?
         await _banner_auto_aus_felder(db_pool, config)
         await _markenstil_felder(db_pool, config)
+        await _farben_auto_feld(db_pool, config)
 
         # "Über Cookies"-Link: Wenn der Kunde keine eigene Cookie-Richtlinie-URL
         # gesetzt hat, auf die von Complyo gehostete öffentliche Seite zeigen.
@@ -1487,7 +1513,8 @@ async def create_or_update_config(
                     logger.warning(f"[Cookie-Config] config_hash nicht aktualisiert: {hash_err2}")
 
         # Check if config exists
-        check_query = "SELECT id, custom_logo_url FROM cookie_banner_configs WHERE site_id = $1"
+        check_query = ("SELECT id, custom_logo_url, primary_color, accent_color, text_color, bg_color "
+                       "FROM cookie_banner_configs WHERE site_id = $1")
         existing = await db_pool.fetchrow(check_query, config.site_id)
 
         # Logo: None heisst "nicht mitgeschickt" und aendert nichts (sonst loescht
@@ -1550,6 +1577,22 @@ async def create_or_update_config(
             # Reconsent-Hash nach dem eigentlichen Update pflegen (siehe oben)
             await _persist_config_hash()
             await _speichere_banner_erzwingen(db_pool, config.site_id, config.banner_erzwingen)
+            # Farben: wer im Designer andere Farben speichert, hat sie gewaehlt, ab
+            # dann folgt die Konfiguration der Website nicht mehr. Eine ausdrueckliche
+            # Angabe des Dashboards (Schalter) gewinnt.
+            from compliance_engine.farben_nachziehen import (
+                FELDER as _FARBFELDER, kennzeichen_nach_speichern, setze_automatisch)
+            try:
+                _gespeichert = await db_pool.fetchval(
+                    "SELECT farben_automatisch FROM cookie_banner_configs WHERE site_id = $1",
+                    config.site_id)
+            except Exception:
+                _gespeichert = None
+            _neu = kennzeichen_nach_speichern(
+                _gespeichert, config.farben_automatisch,
+                any(str(existing.get(f) or '').lower() != str(getattr(config, f) or '').lower()
+                    for f in _FARBFELDER))
+            await setze_automatisch(db_pool, config.site_id, _neu)
 
             return {
                 "success": True,
@@ -1604,6 +1647,10 @@ async def create_or_update_config(
             # Erst-Save: Hash setzen (config_hash war NULL → kein Reconsent)
             await _persist_config_hash()
             await _speichere_banner_erzwingen(db_pool, config.site_id, config.banner_erzwingen)
+            # Neu angelegt aus dem Designer: die Farben sind gewaehlt (Kennzeichen aus),
+            # ausser das Dashboard schaltet "folgt der Website" ausdruecklich ein.
+            from compliance_engine.farben_nachziehen import setze_automatisch as _setze_auto
+            await _setze_auto(db_pool, config.site_id, config.farben_automatisch)
 
             return {
                 "success": True,
@@ -1656,6 +1703,10 @@ async def update_config_partial(
         param_idx = 2
         
         for field, value in updates.dict(exclude_unset=True).items():
+            # Kennzeichen "Farben folgen der Website" getrennt und fehlertolerant
+            # schreiben (siehe unten), nie als Spalte im grossen UPDATE.
+            if field == "farben_automatisch":
+                continue
             if value is not None:
                 if isinstance(value, (dict, list)):
                     update_fields.append(f"{field} = ${param_idx}::jsonb")
@@ -1665,21 +1716,38 @@ async def update_config_partial(
                     values.append(value)
                 param_idx += 1
         
-        if not update_fields:
+        if not update_fields and updates.farben_automatisch is None:
             raise HTTPException(status_code=400, detail="No fields to update")
-        
-        update_query = f"""
-            UPDATE cookie_banner_configs SET
-                {', '.join(update_fields)},
-                updated_at = NOW()
-            WHERE site_id = $1
-            RETURNING id
-        """
-        
-        result = await db_pool.fetchrow(update_query, *values)
-        
+
+        if update_fields:
+            update_query = f"""
+                UPDATE cookie_banner_configs SET
+                    {', '.join(update_fields)},
+                    updated_at = NOW()
+                WHERE site_id = $1
+                RETURNING id, revision
+            """
+            result = await db_pool.fetchrow(update_query, *values)
+        else:
+            # Nur das Kennzeichen: nichts am Banner ist zu aendern.
+            result = await db_pool.fetchrow(
+                "SELECT id, revision FROM cookie_banner_configs WHERE site_id = $1", site_id)
+
         if not result:
             raise HTTPException(status_code=404, detail="Configuration not found")
+
+        # Farben von Hand geaendert: ab dann folgt die Konfiguration der Website nicht
+        # mehr. Eine ausdrueckliche Angabe (Schalter im Dashboard) gewinnt.
+        from compliance_engine.farben_nachziehen import (
+            FELDER as _FARBFELDER, kennzeichen_nach_speichern, setze_automatisch)
+        try:
+            _gespeichert = await db_pool.fetchval(
+                "SELECT farben_automatisch FROM cookie_banner_configs WHERE site_id = $1", site_id)
+        except Exception:
+            _gespeichert = None
+        await setze_automatisch(db_pool, site_id, kennzeichen_nach_speichern(
+            _gespeichert, updates.farben_automatisch,
+            any(getattr(updates, f, None) is not None for f in _FARBFELDER)))
         
         return {
             "success": True,
@@ -2466,6 +2534,7 @@ async def scan_website(
         # steht im Einstellungsfenster des Banners an der Stelle des Absenders.
         logo: Dict[str, Any] = {}
         stil: Dict[str, Any] = {}
+        gerendert = None
         try:
             from compliance_engine.markenfarben_gerendert import markenfarben_gerendert
             gerendert = await markenfarben_gerendert(
@@ -2515,6 +2584,10 @@ async def scan_website(
                     """, site_id, user_id, json.dumps(service_keys_found), url,
                         f['primary_color'], f['accent_color'], f['text_color'], f['bg_color'])
                     farben_gespeichert = True
+                    # Der Scan hat die Farben gelesen, niemand sie gewaehlt: ab jetzt
+                    # folgt die Konfiguration der Website (compliance_engine/farben_nachziehen.py).
+                    from compliance_engine.farben_nachziehen import setze_automatisch as _auto
+                    await _auto(db_pool, site_id, True)
                 else:
                     res = await db_pool.execute("""
                         INSERT INTO cookie_banner_configs (
@@ -2534,6 +2607,16 @@ async def scan_website(
         stil_gespeichert = False
         if config_updated and stil:
             stil_gespeichert = await _speichere_markenstil(db_pool, site_id, stil)
+        # Bestehende Konfiguration mit Kennzeichen "folgt der Website": Farben nachziehen.
+        # Von Hand gewaehlte (Kennzeichen aus) bleiben unberuehrt. Fehler heissen nur:
+        # nicht nachgezogen.
+        farben_nachgezogen = None
+        if config_updated and not farben_gespeichert and gerendert:
+            try:
+                from compliance_engine.farben_nachziehen import nachziehen as _nachziehen
+                farben_nachgezogen = await _nachziehen(db_pool, site_id, gerendert)
+            except Exception as e:
+                logger.warning(f"[Scan] Farben nicht nachgezogen fuer {site_id}: {e}")
 
         # Drittlandtransfer-Findings (abmahnfähig, KEIN Cookie-Problem) durchreichen.
         # Diese erscheinen unabhängig davon, ob Banner-Cookies gefunden wurden —
@@ -2584,6 +2667,9 @@ async def scan_website(
             "farben_quelle": farben['quelle'],
             "farben_angepasst": farben['angepasst'],
             "farben_gespeichert": farben_gespeichert,
+            "farben_nachgezogen": ({"zustand": farben_nachgezogen.get("zustand"),
+                                    "felder": farben_nachgezogen.get("felder")}
+                                   if farben_nachgezogen else None),
             "logo": ({"url": logo.get("url"), "quelle": logo.get("quelle"), "grund": logo.get("grund")}
                      if logo.get("url") else None),
             "logo_gespeichert": logo_gespeichert,

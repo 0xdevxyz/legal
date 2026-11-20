@@ -23,6 +23,7 @@ import ConsentStatistics from '@/components/cookie-compliance/ConsentStatistics'
 import RevocationChart from '@/components/cookie-compliance/RevocationChart';
 import AdvancedSettings from '@/components/cookie-compliance/AdvancedSettings';
 import BannerAutomatik from '@/components/cookie-compliance/BannerAutomatik';
+import FarbenAutomatik from '@/components/cookie-compliance/FarbenAutomatik';
 import CookieSetupWizard from '@/components/cookie-compliance/CookieSetupWizard';
 import ScanMonitor from '@/components/cookie-compliance/ScanMonitor';
 import ABTestManager from '@/components/cookie-compliance/ABTestManager';
@@ -274,7 +275,13 @@ export default function CookieCompliancePage() {
       }) as any;
       
       if (data.success) {
-        setConfig(newConfig);
+        // Wer andere Farben speichert, schaltet "Farben automatisch" serverseitig ab.
+        // Die Anzeige zieht mit, sonst stünde der Schalter noch auf "an".
+        const farbFelder = ['primary_color', 'accent_color', 'text_color', 'bg_color'];
+        const farbenGeaendert = !!config && farbFelder.some(
+          (f) => String(newConfig?.[f] || '').toLowerCase() !== String((config as any)?.[f] || '').toLowerCase());
+        const schalterBedient = newConfig?.farben_automatisch !== (config as any)?.farben_automatisch;
+        setConfig(farbenGeaendert && !schalterBedient ? { ...newConfig, farben_automatisch: false } : newConfig);
         // Nach erstem Speichern ist die Website gesperrt
         setWebsiteLocked(true);
         return true;
@@ -715,6 +722,7 @@ export default function CookieCompliancePage() {
               </TabsList>
               
               <TabsContent value="design">
+                <FarbenAutomatik config={config} onSave={saveConfig} />
                 <CookieBannerDesigner
                   config={config}
                   siteId={siteId}
