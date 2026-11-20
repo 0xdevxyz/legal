@@ -5,6 +5,7 @@ Aufruf im Backend-Container (Browser und Datenbank sind dort):
     docker exec complyo-backend python tools/farben_nachziehen.py            # Trockenlauf, alle
     docker exec complyo-backend python tools/farben_nachziehen.py --anwenden # schreibt
     docker exec complyo-backend python tools/farben_nachziehen.py --site complyo-de
+    docker exec complyo-backend python tools/farben_nachziehen.py --anwenden --nur-automatisch   # Wochenlauf
     docker exec complyo-backend python tools/farben_nachziehen.py --markiere complyo-de --auto
     docker exec complyo-backend python tools/farben_nachziehen.py --markiere complyo-de --manuell
 
@@ -60,6 +61,8 @@ async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--site", action="append", help="nur diese site_id (mehrfach moeglich)")
     ap.add_argument("--anwenden", action="store_true", help="schreiben (sonst Trockenlauf)")
+    ap.add_argument("--nur-automatisch", action="store_true",
+                    help="nur Konfigurationen mit Kennzeichen farben_automatisch lesen (Wochenlauf)")
     ap.add_argument("--markiere", action="append", help="Kennzeichen fuer diese site_id setzen")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--auto", action="store_true", help="mit --markiere: folgt der Website")
@@ -79,6 +82,7 @@ async def main() -> int:
 
         rows = await pool.fetch(
             "SELECT site_id, last_scan_url FROM cookie_banner_configs WHERE is_active "
+            + ("AND farben_automatisch " if args.nur_automatisch else "")
             + ("AND site_id = ANY($1::text[]) " if args.site else "")
             + "ORDER BY site_id", *([args.site] if args.site else []))
         print(("ANWENDEN" if args.anwenden else "TROCKENLAUF") + f": {len(rows)} Konfiguration(en)\n")
