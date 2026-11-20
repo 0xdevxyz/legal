@@ -444,3 +444,42 @@ def test_scanner_dienst_liest_farben_auch_aus_externem_css(monkeypatch):
     assert ergebnis.get("error") is None, ergebnis
     assert ergebnis["brand_colors"]["scraped"] is True
     assert ergebnis["brand_colors"]["primary_color"] == "#1d4ed8"
+
+
+def _bestehende_mit_kennzeichen(monkeypatch, automatisch):
+    """Bestehende Konfiguration (Tuerkis), Erkennung findet jetzt ein Blau."""
+    modul, client = _client()
+    pool = MagicMock()
+    pool.fetch = AsyncMock(return_value=[])
+    pool.fetchrow = AsyncMock(return_value={
+        "id": 1, "primary_color": "#25bac8", "accent_color": "#1597a3",
+        "text_color": "#134e4a", "bg_color": "#f0fdfa", "farben_automatisch": automatisch})
+    pool.execute = AsyncMock(return_value="UPDATE 1")
+    monkeypatch.setattr(modul, "db_pool", pool)
+    _angemeldet(monkeypatch, modul)
+    monkeypatch.setattr(modul, "cookie_scanner", _scanner_mit_farben())
+
+    import compliance_engine.markenfarben_gerendert as mg
+
+    async def erkennung(url, **kw):
+        return {"scraped": True, "primary_color": "#1d4ed8", "accent_color": "#1e40af",
+                "text_color": "#111827", "bg_color": "#ffffff"}
+
+    monkeypatch.setattr(mg, "markenfarben_gerendert", erkennung)
+    daten = client.post("/api/cookie-compliance/scan", json={"url": "https://kunde.de"}).json()
+    farb_updates = [c.args for c in pool.execute.await_args_list if "primary_color = $2" in c.args[0]]
+    return daten, farb_updates
+
+
+def test_bestehende_konfiguration_mit_kennzeichen_zieht_beim_scan_nach(monkeypatch):
+    daten, farb_updates = _bestehende_mit_kennzeichen(monkeypatch, True)
+    assert daten["farben_nachgezogen"]["zustand"] == "nachgezogen"
+    assert len(farb_updates) == 1
+    assert farb_updates[0][2] == "#1d4ed8"           # Hauptfarbe der Website, nicht abgedunkelt
+    assert "farben_automatisch = TRUE" in farb_updates[0][0]
+
+
+def test_von_hand_gewaehlte_farben_bleiben_beim_scan(monkeypatch):
+    daten, farb_updates = _bestehende_mit_kennzeichen(monkeypatch, False)
+    assert daten["farben_nachgezogen"]["zustand"] == "manuell"
+    assert farb_updates == []
