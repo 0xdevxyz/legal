@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, TrendingUp, Euro } from 'lucide-react';
+import { Shield, Cookie, FileText, Eye, AlertTriangle, CheckCircle, Search, Euro } from 'lucide-react';
 import { complianceApi } from '@/lib/api';
-import { aktuelleHerkunft, mitHerkunft } from '@/lib/herkunft';
+import Entscheidung from './entscheidung/Entscheidung';
 
 
 /**
@@ -65,6 +65,19 @@ export default function WebsiteScanner() {
     } catch {
       // ignorieren – kein gültiger gespeicherter Scan
     }
+
+    // Einstieg mit Adresse in der URL (?url=beispiel.de), z. B. aus dem
+    // Eingabefeld der Startseite. Dann startet der Scan sofort; die Seite
+    // soll mit dem Ergebnis aufgehen, nicht mit einem leeren Feld. Ein
+    // gespeicherter Scan aus localStorage zaehlt dann nicht, die Adresse aus
+    // der Zeile ist die neuere Absicht.
+    const ausAdresse = new URLSearchParams(window.location.search).get('url');
+    if (ausAdresse && ausAdresse.trim()) {
+      setUrl(ausAdresse.trim());
+      setScanResult(null);
+      void handleScan(undefined, ausAdresse.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pillars = [
@@ -160,10 +173,10 @@ export default function WebsiteScanner() {
     }
   };
 
-  const handleScan = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleScan = async (e?: React.FormEvent, eingabe?: string) => {
+    e?.preventDefault();
     
-    if (!url) {
+    if (!(eingabe ?? url)) {
       setError('Bitte geben Sie eine Website-URL ein');
       return;
     }
@@ -173,7 +186,7 @@ export default function WebsiteScanner() {
     
     try {
       // Normalisiere URL
-      const normalizedUrl = normalizeUrl(url);
+      const normalizedUrl = normalizeUrl(eingabe ?? url);
 
       // API-Analyse durchführen
       const result = await complianceApi.analyzeWebsite(normalizedUrl);
@@ -283,7 +296,7 @@ export default function WebsiteScanner() {
       
       // URL-Normalisierungsfehler
       try {
-        normalizeUrl(url);
+        normalizeUrl(eingabe ?? url);
       } catch (e) {
         setError('Die eingegebene URL ist ungültig. Bitte verwenden Sie das Format: beispiel.de oder www.beispiel.de');
         setIsScanning(false);
@@ -644,41 +657,19 @@ export default function WebsiteScanner() {
               })}
             </div>
 
-            {/* CTA */}
-            <div className="bg-gray-900 rounded-2xl p-8 text-center text-white">
-              <h3 className="text-2xl font-bold mb-4">
-                {(scanResult.befundeGesamt ?? 0) === 0
-                  ? 'Sauber. Und morgen?'
-                  : 'Bereit, die gefundenen Probleme zu lösen?'}
-              </h3>
-              <p className="text-lg mb-6 opacity-90">
-                {(scanResult.befundeGesamt ?? 0) === 0
-                  ? 'Dieser Befund gilt für heute. Complyo prüft die Seite laufend weiter und meldet sich, wenn eine Änderung an der Website oder an der Rechtslage etwas daran ändert.'
-                  : 'Complyo zeigt dir konkrete Lösungsvorschläge für alle gefundenen Issues – verständlich erklärt, direkt umsetzbar.'}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a
-                  href={mitHerkunft(
-                    `${process.env.NEXT_PUBLIC_APP_URL || 'https://app.complyo.de'}/register?plan=free`,
-                    typeof window === 'undefined' ? new URLSearchParams() : aktuelleHerkunft(),
-                  )}
-                  className="px-8 py-4 bg-white text-gray-900 font-semibold rounded-xl hover:shadow-2xl transition-all transform hover:scale-105 inline-flex items-center justify-center gap-2"
-                >
-                  <TrendingUp className="w-5 h-5" />
-                  {(scanResult.befundeGesamt ?? 0) === 0
-                    ? 'Kostenlos registrieren und Befund festhalten'
-                    : 'Kostenlos registrieren und Fix starten'}
-                </a>
-                <button
-                  onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}
-                  className="px-8 py-4 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-xl transition-all"
-                >
-                  Neue Website scannen
-                </button>
-              </div>
-              <p className="text-sm mt-4 opacity-75">
-                ✓ Kostenloser Fix · ✓ Keine Kreditkarte erforderlich
-              </p>
+            {/* Vom Befund zur Entscheidung (seit 10.11.2026): Gesetzesbezug je
+                Bereich, Rechner mit den Zahlen des Besuchers, vier Wege im
+                Vergleich, Preis mit Risikoumkehr. Vorher stand hier nur ein
+                dunkler CTA-Kasten. Siehe entscheidung/Entscheidung.tsx. */}
+            <Entscheidung scanResult={scanResult} />
+
+            <div className="text-center">
+              <button
+                onClick={() => { setScanResult(null); setUrl(''); localStorage.removeItem('last_scan_data'); }}
+                className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold rounded-xl border-2 border-gray-200 transition-colors"
+              >
+                Andere Website scannen
+              </button>
             </div>
           </div>
         )}

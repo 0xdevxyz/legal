@@ -99,8 +99,15 @@ class TestOberflaeche:
         text = _datei("landing-react/src/lib/herkunft.ts")
         assert "sessionStorage.setItem" in text
         assert "setHerkunft(aktuelleHerkunft())" in text
+        # Seit 10.11.2026 sitzen die Kaufknoepfe der Ergebnisseite nicht mehr im
+        # Scanner selbst, sondern in entscheidung/PreisUndRisikoumkehr.tsx.
+        # Der Scanner haengt den Abschnitt ein, der Abschnitt liest die
+        # gemerkte Herkunft ueber den Hook (der aktuelleHerkunft() ruft).
         scanner = _datei("landing-react/src/components/landing/WebsiteScanner.tsx")
-        assert "aktuelleHerkunft()" in scanner
+        assert "<Entscheidung scanResult={scanResult} />" in scanner
+        kaufweg = _datei("landing-react/src/components/landing/entscheidung/PreisUndRisikoumkehr.tsx")
+        assert "useHerkunft()" in kaufweg
+        assert "mitHerkunft(`${APP_URL}/register?plan=pro`, herkunft)" in kaufweg
 
     def test_kampagnenseite_fuehrt_mit_herkunft_zum_kauf(self):
         text = _datei("landing-react/src/components/kampagne/EarlyAccessKampagne.tsx")

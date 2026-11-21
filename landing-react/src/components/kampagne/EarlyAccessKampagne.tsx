@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import {
-  ShieldCheck, Eye, Cookie, FileText, Gauge, CheckCircle2, ArrowDown,
+  ShieldCheck, Eye, Cookie, FileText, Gauge, CheckCircle2, ArrowDown, Search,
 } from 'lucide-react';
 import WartelistenFormular from './WartelistenFormular';
 import Erklaervideo from '@/components/Erklaervideo';
@@ -149,6 +149,38 @@ export default function EarlyAccessKampagne({
             stimmt. Die Reparatur passiert im Werkzeug, und jede Änderung wird danach im Browser
             nachgemessen – damit du belegen kannst, was du getan hast.
           </p>
+
+          {/* Scan vor Angebot (seit 10.11.2026): Wer erst sehen will, was auf
+              der eigenen Website nicht stimmt, gibt hier die Adresse ein und
+              landet auf der Ergebnisseite (/bfsg-check?url=...), die vom
+              Befund bis zum Preis durchfuehrt. Natives GET-Formular, laeuft
+              auch ohne JavaScript. Die Warteliste darunter bleibt der
+              Hauptweg, die Kampagnenkennung aendert sich nicht. */}
+          <form
+            action="/bfsg-check"
+            method="get"
+            className="flex flex-col sm:flex-row gap-2 mb-6"
+            aria-label="Website kostenlos prüfen"
+          >
+            <label htmlFor="start-scan-url" className="sr-only">Adresse deiner Website</label>
+            <input
+              id="start-scan-url"
+              name="url"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              placeholder="deine-website.de"
+              required
+              className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:border-akzent-600 focus:ring-4 focus:ring-akzent-100 outline-none"
+            />
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-akzent-400 hover:bg-akzent-500 text-gray-900 font-semibold rounded-xl transition-colors whitespace-nowrap"
+            >
+              <Search className="w-4 h-4" aria-hidden="true" />
+              Erst prüfen, kostenlos
+            </button>
+          </form>
 
           <p className="text-lg text-gray-900 font-semibold leading-relaxed mb-8">
             Die ersten {PLAETZE} zahlen {PREIS_EARLY} statt {PREIS_REGULAER} im Monat – das ganze erste Jahr.
